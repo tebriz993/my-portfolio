@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alex Johnson - Full Stack Developer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        primary: '#2563EB',
+                        secondary: '#1E293B',
+                        accent: '#F59E0B',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.8s ease-in-out',
+                        'slide-up': 'slideUp 0.6s ease-out',
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        html { scroll-behavior: smooth; }
+        .hero-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .skill-icon {
+            transition: all 0.3s ease;
+        }
+        .skill-icon:hover {
+            transform: scale(1.1);
+            color: #2563EB;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+    <!-- @COMPONENT: Navigation -->
+    <nav class="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md z-50 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex-shrink-0">
+                    <h1 class="text-xl font-bold text-secondary">Alex Johnson</h1>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-8">
+                        <a href="#home" class="text-gray-700 hover:text-primary transition-colors px-3 py-2 text-sm font-medium">Home</a>
+                        <a href="#about" class="text-gray-700 hover:text-primary transition-colors px-3 py-2 text-sm font-medium">About</a>
+                        <a href="#skills" class="text-gray-700 hover:text-primary transition-colors px-3 py-2 text-sm font-medium">Skills</a>
+                        <a href="#portfolio" class="text-gray-700 hover:text-primary transition-colors px-3 py-2 text-sm font-medium">Portfolio</a>
+                        <a href="#contact" class="text-gray-700 hover:text-primary transition-colors px-3 py-2 text-sm font-medium">Contact</a>
+                    </div>
+                </div>
+                <div class="md:hidden">
+                    <button class="text-gray-700 hover:text-primary focus:outline-none">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: Navigation -->
+
+    <!-- @COMPONENT: Hero Section -->
+    <section id="home" class="hero-gradient min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto text-center text-white">
+            <div class="animate-fade-in">
+                <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6">
+                    Hi, I'm <span class="text-accent">Alex Johnson</span>
+                </h1>
+                <p class="text-xl sm:text-2xl mb-8 text-gray-200">
+                    Full Stack Developer & UI/UX Enthusiast
+                </p>
+                <p class="text-lg mb-12 text-gray-300 max-w-2xl mx-auto leading-relaxed">
+                    I craft beautiful, functional web applications that solve real-world problems. 
+                    With 5+ years of experience in modern web technologies, I bring ideas to life through clean code and thoughtful design.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="#portfolio" class="bg-accent hover:bg-amber-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors inline-flex items-center justify-center">
+                        <i class="fas fa-briefcase mr-2"></i>
+                        View My Work
+                    </a>
+                    <a href="#contact" class="border-2 border-white text-white hover:bg-white hover:text-gray-900 px-8 py-3 rounded-lg font-semibold transition-all inline-flex items-center justify-center">
+                        <i class="fas fa-envelope mr-2"></i>
+                        Get In Touch
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
+            <a href="#about" class="text-white hover:text-accent transition-colors">
+                <i class="fas fa-chevron-down text-2xl"></i>
+            </a>
+        </div>
+    </section>
+    <!-- @END_COMPONENT: Hero Section -->
+
+    <!-- @COMPONENT: About Section -->
+    <section id="about" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-secondary mb-4">About Me</h2>
+                <div class="w-24 h-1 bg-primary mx-auto"></div>
+            </div>
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <div class="space-y-6">
+                    <h3 class="text-2xl font-semibold text-secondary mb-4">Passionate Developer & Problem Solver</h3>
+                    <p class="text-gray-600 leading-relaxed text-lg" data-mock="true">
+                        I'm a full-stack developer with a passion for creating exceptional digital experiences. 
+                        My journey began 5 years ago when I discovered the power of code to transform ideas into reality.
+                    </p>
+                    <p class="text-gray-600 leading-relaxed text-lg" data-mock="true">
+                        I specialize in React, Node.js, and modern web technologies, always staying current with industry trends. 
+                        My approach combines technical expertise with user-centered design thinking to deliver solutions that not only work beautifully but also provide genuine value.
+                    </p>
+                    <div class="flex flex-wrap gap-4 pt-4">
+                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Problem Solving</span>
+                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Team Collaboration</span>
+                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Continuous Learning</span>
+                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">User Experience</span>
+                    </div>
+                    <div class="pt-6">
+                        <a href="#" class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors inline-flex items-center" data-implementation="Link to downloadable resume">
+                            <i class="fas fa-download mr-2"></i>
+                            Download Resume
+                        </a>
+                    </div>
+                </div>
+                <div class="relative">
+                    <!-- Professional headshot of a confident developer in a modern office setting -->
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=800" 
+                         alt="Alex Johnson - Professional Developer" 
+                         class="rounded-2xl shadow-2xl w-full max-w-md mx-auto" 
+                         data-mock-image="true" 
+                         data-implementation="Replace with actual professional headshot" />
+                    <div class="absolute -bottom-6 -right-6 bg-accent text-white p-4 rounded-2xl shadow-lg">
+                        <i class="fas fa-code text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- @END_COMPONENT: About Section -->
+
+    <!-- @COMPONENT: Skills Section -->
+    <section id="skills" class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-secondary mb-4">Skills & Technologies</h2>
+                <div class="w-24 h-1 bg-primary mx-auto mb-6"></div>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+                    I work with modern technologies to build scalable, efficient applications
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+                <div class="bg-white rounded-xl p-8 shadow-lg card-hover">
+                    <div class="text-primary text-3xl mb-4">
+                        <i class="fas fa-laptop-code"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-secondary mb-4">Frontend Development</h3>
+                    <p class="text-gray-600 mb-6">Creating responsive, interactive user interfaces with modern frameworks and libraries.</p>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">React/Next.js</span>
+                            <span class="text-sm text-gray-500">95%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 95%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">TypeScript</span>
+                            <span class="text-sm text-gray-500">90%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 90%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">Tailwind CSS</span>
+                            <span class="text-sm text-gray-500">92%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 92%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-8 shadow-lg card-hover">
+                    <div class="text-primary text-3xl mb-4">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-secondary mb-4">Backend Development</h3>
+                    <p class="text-gray-600 mb-6">Building robust APIs and server-side applications with focus on performance and security.</p>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">Node.js</span>
+                            <span class="text-sm text-gray-500">88%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 88%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">Python/Django</span>
+                            <span class="text-sm text-gray-500">85%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 85%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">PostgreSQL</span>
+                            <span class="text-sm text-gray-500">82%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 82%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-8 shadow-lg card-hover">
+                    <div class="text-primary text-3xl mb-4">
+                        <i class="fas fa-cloud"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-secondary mb-4">Cloud & DevOps</h3>
+                    <p class="text-gray-600 mb-6">Deploying and managing applications with modern cloud infrastructure and CI/CD practices.</p>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">AWS/Vercel</span>
+                            <span class="text-sm text-gray-500">80%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 80%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">Docker</span>
+                            <span class="text-sm text-gray-500">78%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 78%"></div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-700">Git/GitHub</span>
+                            <span class="text-sm text-gray-500">95%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-primary h-2 rounded-full" style="width: 95%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-8">
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-react"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">React</span>
+                </div>
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-node-js"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Node.js</span>
+                </div>
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-python"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Python</span>
+                </div>
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-aws"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">AWS</span>
+                </div>
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-docker"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Docker</span>
+                </div>
+                <div class="text-center">
+                    <div class="skill-icon text-4xl text-gray-600 mb-3">
+                        <i class="fab fa-git-alt"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-700">Git</span>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- @END_COMPONENT: Skills Section -->
+
+    <!-- @COMPONENT: Portfolio Section -->
+    <section id="portfolio" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-secondary mb-4">Featured Projects</h2>
+                <div class="w-24 h-1 bg-primary mx-auto mb-6"></div>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+                    Here are some of my recent projects that showcase my skills and creativity
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Project 1 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Modern e-commerce website interface showing product listings and shopping cart -->
+                    <img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="E-commerce Platform Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">E-commerce Platform</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            A full-stack e-commerce solution built with React, Node.js, and Stripe integration. Features include user authentication, product management, and secure payments.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">React</span>
+                            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Node.js</span>
+                            <span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">MongoDB</span>
+                            <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">Stripe</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 2 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Task management application dashboard with kanban boards and productivity features -->
+                    <img src="https://images.unsplash.com/photo-1611224923853-80b023f02d71?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="Task Management App Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">Task Management App</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            A collaborative project management tool with real-time updates, drag-and-drop functionality, and team collaboration features.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Next.js</span>
+                            <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">Socket.io</span>
+                            <span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">PostgreSQL</span>
+                            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Tailwind</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 3 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Modern fitness tracking mobile app interface with charts and progress tracking -->
+                    <img src="https://images.unsplash.com/photo-1551698618-1dfe5d97d256?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="Fitness Tracking App Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">Fitness Tracking App</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            A mobile-first fitness application with workout tracking, progress analytics, and social features for motivation and accountability.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">React Native</span>
+                            <span class="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Firebase</span>
+                            <span class="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full">Chart.js</span>
+                            <span class="bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded-full">Expo</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 4 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Real estate website with property listings and search functionality -->
+                    <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="Real Estate Platform Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">Real Estate Platform</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            A comprehensive real estate platform with advanced search filters, property management, and integrated mapping functionality.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Vue.js</span>
+                            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Laravel</span>
+                            <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">Maps API</span>
+                            <span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">MySQL</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 5 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Data visualization dashboard with charts, graphs and analytics -->
+                    <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="Analytics Dashboard Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">Analytics Dashboard</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            An interactive data visualization dashboard with real-time analytics, custom reports, and business intelligence features.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">React</span>
+                            <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">D3.js</span>
+                            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Express</span>
+                            <span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">Redis</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 6 -->
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                    <!-- Social media application interface with posts, messaging and user profiles -->
+                    <img src="https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=400" 
+                         alt="Social Media App Project" 
+                         class="w-full h-48 object-cover" 
+                         data-mock-image="true" />
+                    <div class="p-6">
+                        <h3 class="text-xl font-semibold text-secondary mb-2" data-mock="true">Social Media App</h3>
+                        <p class="text-gray-600 mb-4" data-mock="true">
+                            A full-featured social media application with real-time messaging, content sharing, and advanced privacy controls.
+                        </p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">React</span>
+                            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">GraphQL</span>
+                            <span class="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">AWS</span>
+                            <span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">WebRTC</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <a href="#" class="text-primary hover:text-blue-700 font-medium flex items-center" data-implementation="Link to live demo">
+                                <i class="fas fa-external-link-alt mr-1"></i>
+                                Live Demo
+                            </a>
+                            <a href="#" class="text-gray-600 hover:text-gray-800 font-medium flex items-center" data-implementation="Link to GitHub repository">
+                                <i class="fab fa-github mr-1"></i>
+                                Code
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-12">
+                <a href="#" class="bg-primary hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors inline-flex items-center" data-implementation="Link to full portfolio or GitHub profile">
+                    <i class="fab fa-github mr-2"></i>
+                    View All Projects
+                </a>
+            </div>
+        </div>
+    </section>
+    <!-- @END_COMPONENT: Portfolio Section -->
+
+    <!-- @COMPONENT: Contact Section -->
+    <section id="contact" class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold text-secondary mb-4">Get In Touch</h2>
+                <div class="w-24 h-1 bg-primary mx-auto mb-6"></div>
+                <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+                    Let's discuss your next project or just say hello. I'm always excited to work on something new and meaningful.
+                </p>
+            </div>
+            
+            <div class="grid lg:grid-cols-2 gap-12">
+                <div class="space-y-8">
+                    <div>
+                        <h3 class="text-2xl font-semibold text-secondary mb-6">Contact Information</h3>
+                        <div class="space-y-6">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 w-12 h-12 bg-primary text-white rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-envelope"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Email</p>
+                                    <p class="text-lg text-gray-900" data-mock="true">alex.johnson@email.com</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 w-12 h-12 bg-primary text-white rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-phone"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Phone</p>
+                                    <p class="text-lg text-gray-900" data-mock="true">+1 (555) 123-4567</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 w-12 h-12 bg-primary text-white rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </div>
+                                <div class="ml-4">
+                                    <p class="text-sm font-medium text-gray-500">Location</p>
+                                    <p class="text-lg text-gray-900" data-mock="true">San Francisco, CA</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-2xl font-semibold text-secondary mb-6">Follow Me</h3>
+                        <div class="flex space-x-4">
+                            <a href="#" class="w-12 h-12 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-primary hover:border-primary transition-all" data-implementation="Link to actual LinkedIn profile">
+                                <i class="fab fa-linkedin text-xl"></i>
+                            </a>
+                            <a href="#" class="w-12 h-12 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-primary hover:border-primary transition-all" data-implementation="Link to actual GitHub profile">
+                                <i class="fab fa-github text-xl"></i>
+                            </a>
+                            <a href="#" class="w-12 h-12 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-primary hover:border-primary transition-all" data-implementation="Link to actual Twitter profile">
+                                <i class="fab fa-twitter text-xl"></i>
+                            </a>
+                            <a href="#" class="w-12 h-12 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-primary hover:border-primary transition-all" data-implementation="Link to actual Instagram profile">
+                                <i class="fab fa-instagram text-xl"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-lg p-8">
+                    <form class="space-y-6" data-implementation="Form should handle submission with validation">
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                            <input type="text" id="name" name="name" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                   placeholder="Your full name">
+                        </div>
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                            <input type="email" id="email" name="email" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                   placeholder="your.email@example.com">
+                        </div>
+                        <div>
+                            <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                            <input type="text" id="subject" name="subject" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                   placeholder="What's this about?">
+                        </div>
+                        <div>
+                            <label for="message" class="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                            <textarea id="message" name="message" rows="4" required 
+                                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
+                                      placeholder="Tell me about your project or just say hello..."></textarea>
+                        </div>
+                        <button type="submit" 
+                                class="w-full bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center"
+                                data-event="click:handleSubmit">
+                            <i class="fas fa-paper-plane mr-2"></i>
+                            Send Message
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- @END_COMPONENT: Contact Section -->
+
+    <!-- @COMPONENT: Footer -->
+    <footer class="bg-secondary text-white py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Alex Johnson</h3>
+                    <p class="text-gray-300 mb-4" data-mock="true">
+                        Full Stack Developer passionate about creating exceptional digital experiences that make a difference.
+                    </p>
+                    <div class="flex space-x-4">
+                        <a href="#" class="text-gray-300 hover:text-white transition-colors" data-implementation="Link to actual LinkedIn profile">
+                            <i class="fab fa-linkedin text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-300 hover:text-white transition-colors" data-implementation="Link to actual GitHub profile">
+                            <i class="fab fa-github text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-300 hover:text-white transition-colors" data-implementation="Link to actual Twitter profile">
+                            <i class="fab fa-twitter text-xl"></i>
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold mb-4">Quick Links</h4>
+                    <ul class="space-y-2">
+                        <li><a href="#about" class="text-gray-300 hover:text-white transition-colors">About</a></li>
+                        <li><a href="#skills" class="text-gray-300 hover:text-white transition-colors">Skills</a></li>
+                        <li><a href="#portfolio" class="text-gray-300 hover:text-white transition-colors">Portfolio</a></li>
+                        <li><a href="#contact" class="text-gray-300 hover:text-white transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold mb-4">Services</h4>
+                    <ul class="space-y-2 text-gray-300">
+                        <li>Web Development</li>
+                        <li>Mobile App Development</li>
+                        <li>UI/UX Design</li>
+                        <li>Technical Consulting</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-8 pt-8 text-center">
+                <p class="text-gray-300" data-mock="true">
+                    © 2024 Alex Johnson. All rights reserved. Built with ❤️ using modern web technologies.
+                </p>
+            </div>
+        </div>
+    </footer>
+    <!-- @END_COMPONENT: Footer -->
+
+    <script>
+        // TODO: Implement smooth scrolling behavior for navigation links
+        (function() {
+            // Smooth scrolling for navigation links
+            const navLinks = document.querySelectorAll('a[href^="#"]');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    const targetSection = document.querySelector(targetId);
+                    if (targetSection) {
+                        targetSection.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+
+            // TODO: Implement intersection observer for navigation highlighting
+            // TODO: Implement form validation and submission handling
+            // TODO: Add loading states and success/error messages for form submission
+            // TODO: Implement lazy loading for images
+            // TODO: Add scroll-triggered animations using Intersection Observer API
+        })();
+    </script>
+</body>
+</html>
