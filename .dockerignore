@@ -1,0 +1,34 @@
+# .dockerignore
+
+# Git və Replit faylları
+.git
+.github
+.replit
+replit.nix
+.config
+
+# Lokal qovluqlar və sənədlər
+.local
+attached_assets
+*.md
+portfolio-website.tar.gz
+Dockerfile.txt
+
+# Node.js asılılıqları (bunlar Docker daxilində qurulur)
+node_modules
+client/node_modules
+server/node_modules
+
+# Build nəticələri (lokal maşındakı)
+client/dist
+server/dist
+dist
+
+# Ətraf mühit dəyişənləri (bunlar Render-də təyin olunmalıdır)
+.env
+.env.*
+
+# Müxtəlif log və test faylları
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

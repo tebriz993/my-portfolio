@@ -1,0 +1,258 @@
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Trophy, User, List } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+// --- Oyun Sabitləri ---
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 200;
+const GROUND_Y = GAME_HEIGHT - 20;
+const DINO_WIDTH = 44;
+const DINO_HEIGHT = 47;
+const DINO_DUCK_HEIGHT = 25;
+const DINO_INITIAL_Y = GROUND_Y - DINO_HEIGHT;
+const GRAVITY = 0.9;
+const JUMP_FORCE = -18;
+const INITIAL_GAME_SPEED = 5;
+const MAX_GAME_SPEED = 13;
+const SPEED_ACCELLERATION = 0.001;
+const OBSTACLE_MIN_DISTANCE = 300; // Maneələr arası minimum məsafə
+
+// --- Interfeyslər ---
+interface DinoGameProps { onBack: () => void; }
+interface ObstacleData { id: number; x: number; width: number; height: number; type: 'cactus' | 'bird'; }
+
+// --- Memo-laşdırılmış Komponentlər (Performans üçün) ---
+const Dino = memo(React.forwardRef<HTMLDivElement, { isDucking: boolean }>(({ isDucking }, ref) => {
+  // Dinozavr üçün SVG və ya div-i bura yerləşdirə bilərsiniz
+  return (
+    <div
+      ref={ref}
+      className="absolute text-green-700 dark:text-green-400"
+      style={{
+        left: 50,
+        width: DINO_WIDTH,
+        height: isDucking ? DINO_DUCK_HEIGHT : DINO_HEIGHT,
+        transform: `translateY(${DINO_INITIAL_Y}px)`, // Başlanğıc mövqe
+        willChange: 'transform', // Brauzerə optimizasiya üçün ipucu
+        transition: 'height 150ms ease-out', // Əyilmə animasiyası
+      }}
+    >
+      {/* SVG Dino burada olacaq */}
+      <svg viewBox="0 0 44 47" fill="currentColor">
+        <path d="M43.996 44.228v-2.623h-1.637V19.143h1.637v-2.624H29.14v-3.278h-2.62v-3.28h-3.28V7.338h-2.623V4.715h-3.278V2.09h-3.28V0h-3.28v2.09h-2.623v2.625H5.24v2.623H2.617v2.623H0v3.28h2.617v15.074h1.64v2.623h1.636v2.624H21.86v-2.624h1.637v-2.623h1.636v-2.624h3.28v2.624h1.637v2.623h1.636v2.624h3.28v2.623h1.638v2.623h3.28v-2.623h2.623v-5.247h-2.623v-2.623H43.996zM32.417 19.143v2.624h-1.637v2.623h-3.28v-2.623H25.86v-2.624h-3.28v-2.623h-2.623v2.623H17.33v2.624H13.27v-2.624H10.65v-2.623H8.025v-2.624H5.4v-3.28h2.624V9.96h2.623v2.624h2.623V9.96h2.623v2.624h2.622v2.623h3.28v-2.623h3.28v2.623h3.278v3.935h-1.637z"></path>
+      </svg>
+    </div>
+  );
+}));
+Dino.displayName = 'Dino';
+
+const ObstacleComponent = memo(({ obstacle }: { obstacle: ObstacleData }) => {
+  const isCactus = obstacle.type === 'cactus';
+  return (
+    <div
+      className={`absolute ${isCactus ? 'text-green-800' : 'text-gray-500'}`}
+      style={{
+        left: obstacle.x,
+        bottom: isCactus ? GROUND_Y - obstacle.height : GROUND_Y - obstacle.height - (Math.random() > 0.5 ? 20 : 40), // Quşların hündürlüyünü təsadüfi edək
+        width: obstacle.width,
+        height: obstacle.height,
+        willChange: 'left',
+      }}
+    >
+      {isCactus ? '🌵' : '🦅'}
+    </div>
+  );
+});
+ObstacleComponent.displayName = 'ObstacleComponent';
+
+
+export default function DinoGame({ onBack }: DinoGameProps) {
+  // --- React State (UI vəziyyətini idarə edir) ---
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [scoreToDisplay, setScoreToDisplay] = useState(0); // Yalnız göstərmək üçün
+  const [isDucking, setIsDucking] = useState(false);
+  const [obstaclesToRender, setObstaclesToRender] = useState<ObstacleData[]>([]);
+  const [playerName, setPlayerName] = useState("");
+  const [showScoreSubmit, setShowScoreSubmit] = useState(false);
+
+  // --- Refs (Bütün real-time oyun məntiqi burada) ---
+  const gameLoopRef = useRef<number | null>(null);
+  const dinoElementRef = useRef<HTMLDivElement>(null);
+  const dinoYRef = useRef(DINO_INITIAL_Y);
+  const dinoVelocityRef = useRef(0);
+  const obstaclesRef = useRef<ObstacleData[]>([]);
+  const gameSpeedRef = useRef(INITIAL_GAME_SPEED);
+  const scoreRef = useRef(0);
+  const nextObstacleIdRef = useRef(0);
+
+  // --- Data Fetching (tanstack/query) ---
+  const queryClient = useQueryClient();
+  const { data: topScores = [] } = useQuery({ queryKey: ['dino-scores'], /* ... */ });
+  const submitScoreMutation = useMutation({ mutationFn: async (data) => { /* ... */ }, onSuccess: () => { /* ... */ } });
+
+  // --- Oyun Məntiqi Funksiyaları ---
+
+  const resetGame = useCallback(() => {
+    setIsPlaying(false);
+    setIsGameOver(false);
+    setShowScoreSubmit(false);
+    setPlayerName("");
+    setScoreToDisplay(0);
+    setObstaclesToRender([]);
+    setIsDucking(false);
+
+    dinoYRef.current = DINO_INITIAL_Y;
+    dinoVelocityRef.current = 0;
+    obstaclesRef.current = [];
+    scoreRef.current = 0;
+    gameSpeedRef.current = INITIAL_GAME_SPEED;
+    if (dinoElementRef.current) {
+      dinoElementRef.current.style.transform = `translateY(${DINO_INITIAL_Y}px)`;
+    }
+    if (gameLoopRef.current) {
+      cancelAnimationFrame(gameLoopRef.current);
+    }
+  }, []);
+
+  const startGame = () => {
+    resetGame();
+    setIsPlaying(true);
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
+  };
+  
+  const endGame = useCallback(() => {
+    setIsPlaying(false);
+    setIsGameOver(true);
+    const finalScore = Math.floor(scoreRef.current);
+    const isRecord = topScores.length === 0 || finalScore > (topScores[0]?.score || 0);
+    if (isRecord && finalScore > 0) {
+      setShowScoreSubmit(true);
+    }
+  }, [topScores]);
+
+  const gameLoop = useCallback(() => {
+    // 1. Dinozavr Fizikası
+    dinoVelocityRef.current += GRAVITY;
+    dinoYRef.current += dinoVelocityRef.current;
+    if (dinoYRef.current >= DINO_INITIAL_Y) {
+      dinoYRef.current = DINO_INITIAL_Y;
+      dinoVelocityRef.current = 0;
+    }
+    if (dinoElementRef.current) {
+      dinoElementRef.current.style.transform = `translateY(${dinoYRef.current}px)`;
+    }
+
+    // 2. Oyun Sürəti və Xal
+    gameSpeedRef.current = Math.min(MAX_GAME_SPEED, gameSpeedRef.current + SPEED_ACCELLERATION);
+    scoreRef.current += gameSpeedRef.current * 0.1;
+    // UI-ı hər kadrda yeniləməmək üçün xalı periodik olaraq yeniləyirik
+    if (Math.floor(scoreRef.current) % 10 === 0 && Math.floor(scoreRef.current) > scoreToDisplay) {
+        setScoreToDisplay(Math.floor(scoreRef.current));
+    }
+
+    // 3. Maneələrin Hərəkəti və Yaradılması
+    const lastObstacle = obstaclesRef.current[obstaclesRef.current.length - 1];
+    const shouldAddObstacle = !lastObstacle || (GAME_WIDTH - lastObstacle.x > OBSTACLE_MIN_DISTANCE + Math.random() * 200);
+
+    if (shouldAddObstacle) {
+      const type = Math.random() < 0.7 ? 'cactus' : 'bird';
+      obstaclesRef.current.push({
+        id: nextObstacleIdRef.current++,
+        x: GAME_WIDTH + 50,
+        width: type === 'cactus' ? 25 + Math.random() * 25 : 45,
+        height: type === 'cactus' ? 35 + Math.random() * 15 : 30,
+        type: type,
+      });
+    }
+
+    obstaclesRef.current = obstaclesRef.current
+      .map(obs => ({ ...obs, x: obs.x - gameSpeedRef.current }))
+      .filter(obs => obs.x + obs.width > 0);
+      
+    setObstaclesToRender([...obstaclesRef.current]);
+
+    // 4. Toqquşma Yoxlaması
+    const dinoHeight = isDucking ? DINO_DUCK_HEIGHT : DINO_HEIGHT;
+    const dinoRect = { x: 50, y: dinoYRef.current, width: DINO_WIDTH, height: dinoHeight };
+
+    for (const obs of obstaclesRef.current) {
+        // ... toqquşma yoxlama məntiqi burada ...
+        // Əgər toqquşma varsa, endGame() çağırılır
+    }
+
+    if (isPlaying) {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    }
+  }, [isPlaying, isDucking, endGame, scoreToDisplay]);
+
+  // --- Input Handlers ---
+  const handleJump = useCallback(() => {
+    if (dinoYRef.current >= DINO_INITIAL_Y - 5 && !isDucking) {
+      dinoVelocityRef.current = JUMP_FORCE;
+    }
+  }, [isDucking]);
+
+  const handleDuck = useCallback((shouldDuck: boolean) => {
+    // Tullanan zaman əyilməyə icazə vermirik
+    if (dinoYRef.current < DINO_INITIAL_Y - 5 && shouldDuck) return;
+    setIsDucking(shouldDuck);
+  }, []);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code === 'Space' || e.code === 'ArrowUp') handleJump();
+      if (e.code === 'ArrowDown') handleDuck(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ArrowDown') handleDuck(false);
+    };
+    
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+        window.removeEventListener('keydown', onKeyDown);
+        window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [isPlaying, handleJump, handleDuck]);
+  
+  // --- JSX (Render) ---
+  return (
+    <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
+      {/* Header, Modals, etc. (Dəyişikliklər azdır) */}
+      <div className="flex items-center justify-between p-3 bg-muted/20 border-b shrink-0">
+         <Button variant="outline" size="sm" onClick={onBack}>← Geri</Button>
+         <div className="font-bold text-lg">SCORE: {scoreToDisplay}</div>
+         <Button onClick={isPlaying ? () => {} : startGame}>
+            {isPlaying ? "Oynanılır..." : "Başla"}
+         </Button>
+      </div>
+
+      {isGameOver && (/* Game Over UI */)}
+
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div 
+          className="relative border-2 border-muted rounded-lg overflow-hidden bg-gradient-to-b from-blue-100 to-yellow-100 dark:from-blue-900 dark:to-yellow-900"
+          style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}
+        >
+          <div className="absolute bottom-0 w-full bg-green-400 dark:bg-green-700" style={{ height: GROUND_Y - GAME_HEIGHT + 20 }} />
+          
+          <Dino ref={dinoElementRef} isDucking={isDucking} />
+          
+          {obstaclesToRender.map(obs => <ObstacleComponent key={obs.id} obstacle={obs} />)}
+
+          {!isPlaying && !isGameOver && (/* Instructions UI */)}
+        </div>
+      </div>
+
+      {/* Mobile Controls (Dəyişiklik yoxdur) */}
+    </div>
+  );
+}
