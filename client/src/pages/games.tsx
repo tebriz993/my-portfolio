@@ -10,6 +10,9 @@ import PuzzleGame from "../components/puzzle-game";
 import DinoGame from "../components/dino-game";
 import FlappyBirdGame from "../components/flappy-bird-game";
 import HeadBallGame from "../components/head-ball-game";
+import ReactionTimeGame from "../components/reaction-time-game";
+import TicTacToeGame from "../components/tic-tac-toe-game";
+import SudokuGame from "../components/sudoku-game";
 
 export default function Games() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
@@ -63,6 +66,27 @@ export default function Games() {
       description: "Physics-based 1v1 soccer game with special powers!",
       icon: "⚽",
       component: HeadBallGame,
+    },
+    {
+      id: "reaction-time",
+      title: "Reaction Time",
+      description: "Test your reflexes! Click as fast as you can when the screen turns green.",
+      icon: "⚡",
+      component: ReactionTimeGame,
+    },
+    {
+      id: "tic-tac-toe",
+      title: "Tic-Tac-Toe AI",
+      description: "Can you beat the AI? It utilizes the Minimax algorithm to be unbeatable!",
+      icon: "❌",
+      component: TicTacToeGame,
+    },
+    {
+      id: "sudoku",
+      title: "Sudoku",
+      description: "Classic Sudoku puzzle. train your brain with generated puzzles.",
+      icon: "🔢",
+      component: SudokuGame,
     },
   ];
 

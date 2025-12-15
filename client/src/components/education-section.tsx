@@ -16,7 +16,7 @@ const education = [
   {
     institution: "MyMentorship and Development Agency",
     degree: "Advanced Frontend Development",
-    period: "2024", 
+    period: "2024",
     location: "Baku, Azerbaijan",
     description: "Comprehensive training in modern frontend technologies including HTML5, CSS3, JavaScript, and React.js framework.",
     status: "completed"
@@ -25,7 +25,7 @@ const education = [
     institution: "Software Village",
     degree: "Backend Development with C# .NET",
     period: "2023",
-    location: "Baku, Azerbaijan", 
+    location: "Baku, Azerbaijan",
     description: "Intensive backend development program covering C# MVC architecture, database design, and web API development.",
     status: "completed"
   },
@@ -52,7 +52,7 @@ const achievements = [
   {
     title: "JavaScript Certificate",
     organization: "CISCO Networking Academy",
-    type: "certificate", 
+    type: "certificate",
     year: "2023",
     description: "Comprehensive JavaScript programming certification covering ES6+, DOM manipulation, and modern web development.",
     downloadUrl: "/assets/CISCO Certificate.png",
@@ -62,7 +62,7 @@ const achievements = [
     title: "Algorithms & Data Structures",
     organization: "Stanford University (Coursera)",
     type: "certificate",
-    year: "2023", 
+    year: "2023",
     description: "Advanced algorithms and data structures course covering complexity analysis, graph algorithms, and optimization techniques.",
     downloadUrl: "/assets/Stanford - Algorithms Coursera.pdf",
     status: "completed"
@@ -73,7 +73,7 @@ const achievements = [
     type: "certificate",
     year: "2022",
     description: "Introduction to computer science using Python, covering computational thinking, algorithms, and data structures.",
-    downloadUrl: "/assets/MITx 6.00.pdf", 
+    downloadUrl: "/assets/MITx 6.00.pdf",
     status: "completed"
   },
   {
@@ -82,25 +82,25 @@ const achievements = [
     type: "certificate",
     year: "2022",
     description: "Complete C# programming course covering object-oriented programming, .NET framework, and application development.",
-    downloadUrl: "/assets/Coursera C#.pdf",
+    downloadUrl: "/assets/Coursera CSharp.pdf",
     status: "completed"
   },
   {
     title: "Data Structure and OOP",
     organization: "Programming Academy",
-    type: "certificate", 
+    type: "certificate",
     year: "2022",
     description: "Advanced course on data structures and object-oriented programming principles with practical implementations.",
     downloadUrl: "/assets/Data Structured Certificate.pdf",
     status: "completed"
   },
   {
-    title: "C++ Programming", 
+    title: "C++ Programming",
     organization: "Coursera",
     type: "certificate",
     year: "2021",
     description: "Comprehensive C++ programming course covering memory management, templates, and advanced programming concepts.",
-    downloadUrl: "/assets/Coursera C++.pdf",
+    downloadUrl: "/assets/Coursera CPlusPlus.pdf",
     status: "completed"
   }
 ];

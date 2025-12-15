@@ -45,6 +45,9 @@ export const insertGameScoreSchema = createInsertSchema(gameScores).pick({
   score: true,
   timeInSeconds: true,
   level: true,
+}).extend({
+  timeInSeconds: z.number().optional(),
+  level: z.number().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

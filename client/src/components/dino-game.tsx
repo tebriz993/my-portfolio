@@ -577,8 +577,8 @@ export default function DinoGame({ onBack }: DinoGameProps) {
             <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
               <div className="text-center text-white bg-black/50 p-4 rounded">
                 <p className="text-lg font-bold mb-2">Dino Run</p>
-                <p className="text-sm">↑ / SPACE: Tullan (Jump) 🦖</p>
-                <p className="text-sm">↓: Eyil (Duck) - Quşlardan qaçın! 🦅</p>
+                <p className="text-sm">↑ / SPACE: Jump 🦖</p>
+                <p className="text-sm">↓: Duck - Avoid Birds! 🦅</p>
               </div>
             </div>
           )}
@@ -611,7 +611,7 @@ export default function DinoGame({ onBack }: DinoGameProps) {
           </Button>
         </div>
         <div className="mt-2 text-center text-xs text-muted-foreground">
-          <p>↑/SPACE: Tullan 🦖 • ↓: Eyil (Quşlar üçün) 🦅</p>
+          <p>↑/SPACE: Jump 🦖 • ↓: Duck (For Birds) 🦅</p>
         </div>
       </div>
     </div>

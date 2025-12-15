@@ -4,6 +4,7 @@ import { MailService } from '@sendgrid/mail';
 import { db } from "./db";
 import { gameScores, insertGameScoreSchema } from "@shared/schema";
 import { desc, asc, eq, and } from "drizzle-orm";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // GitHub API proxy endpoint
@@ -26,7 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const repos = await response.json();
-      
+
       // Filter out forks and sort by stars/activity
       const filteredRepos = repos
         .filter((repo: any) => !repo.fork)
@@ -41,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(filteredRepos);
     } catch (error) {
       console.error("Error fetching GitHub repos:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to fetch repositories",
         message: error instanceof Error ? error.message : "Unknown error"
       });
@@ -55,7 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate required fields
       if (!name || !email || !subject || !message) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: "Missing required fields",
           message: "Name, email, subject, and message are required"
         });
@@ -63,7 +64,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if SendGrid API key is available
       if (!process.env.SENDGRID_API_KEY) {
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: "Email service not configured",
           message: "SendGrid API key is missing"
         });
@@ -105,14 +106,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send email
       await mailService.send(emailContent);
 
-      res.json({ 
+      res.json({
         success: true,
         message: "Email sent successfully"
       });
 
     } catch (error) {
       console.error("Error sending email:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to send email",
         message: error instanceof Error ? error.message : "Unknown error"
       });
@@ -120,29 +121,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Game scores API endpoints
-  
+
   // Get top scores for a specific game
   app.get("/api/games/:gameType/scores", async (req, res) => {
     try {
       const { gameType } = req.params;
       const { limit = "10" } = req.query;
-      
+
       let orderBy;
-      if (gameType === "memory") {
-        // For memory game, lower time is better
+      if (gameType === "memory" || gameType === "sudoku") {
+        // For memory and sudoku, lower time is better
         orderBy = asc(gameScores.timeInSeconds);
+      } else if (gameType === "reaction-time") {
+        // For reaction time, lower score (ms) is better
+        orderBy = asc(gameScores.score);
       } else {
         // For other games, higher score is better
         orderBy = desc(gameScores.score);
       }
-      
+
       const scores = await db
         .select()
         .from(gameScores)
         .where(eq(gameScores.gameType, gameType))
         .orderBy(orderBy)
         .limit(parseInt(limit as string));
-        
+
       res.json(scores);
     } catch (error) {
       console.error("Error fetching game scores:", error);
@@ -154,15 +158,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/games/scores", async (req, res) => {
     try {
       const scoreData = insertGameScoreSchema.parse(req.body);
-      
+
       const [newScore] = await db
         .insert(gameScores)
         .values(scoreData)
         .returning();
-        
+
       res.json(newScore);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error("Validation error saving game score:", error.errors);
+        return res.status(400).json({ error: "Invalid score data", details: error.errors });
+      }
       console.error("Error saving game score:", error);
+      console.log("Failed Payload:", req.body); // Log payload for debugging
       res.status(500).json({ error: "Failed to save score" });
     }
   });
@@ -171,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/headball/scores", async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-      
+
       const scores = await db
         .select({
           id: gameScores.id,
@@ -184,7 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(gameScores.gameType, 'headball'))
         .orderBy(desc(gameScores.score))
         .limit(limit || 100);
-        
+
       res.json(scores);
     } catch (error) {
       console.error("Error fetching Head Ball scores:", error);
@@ -195,11 +204,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/games/headball/scores", async (req, res) => {
     try {
       const { playerName, score, timeInSeconds } = req.body;
-      
+
       if (!playerName || typeof score !== 'number' || typeof timeInSeconds !== 'number') {
         return res.status(400).json({ error: "Invalid score data" });
       }
-      
+
       const [newScore] = await db
         .insert(gameScores)
         .values({
@@ -209,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           timeInSeconds,
         })
         .returning();
-        
+
       res.json(newScore);
     } catch (error) {
       console.error("Error saving Head Ball score:", error);
@@ -221,14 +230,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/:gameType/player/:playerName/best", async (req, res) => {
     try {
       const { gameType, playerName } = req.params;
-      
+
       let orderBy;
       if (gameType === "memory") {
         orderBy = asc(gameScores.timeInSeconds);
       } else {
         orderBy = desc(gameScores.score);
       }
-      
+
       const [bestScore] = await db
         .select()
         .from(gameScores)
@@ -238,7 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .orderBy(orderBy)
         .limit(1);
-        
+
       res.json(bestScore || null);
     } catch (error) {
       console.error("Error fetching player best score:", error);

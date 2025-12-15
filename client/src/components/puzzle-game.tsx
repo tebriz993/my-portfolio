@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Trophy, Shuffle, Check, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { RotateCcw, Trophy, Shuffle, Check, X, Clock, User, List } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface PuzzlePiece {
   id: number;
@@ -169,7 +179,70 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
   const [countdown, setCountdown] = useState<number>(5);
   const [errorCell, setErrorCell] = useState<number | null>(null);
 
+  // New states for Timer & Score Submission
+  const [gameTime, setGameTime] = useState<number>(0);
+  const [isGameStarted, setIsGameStarted] = useState<boolean>(false);
+  const [playerName, setPlayerName] = useState<string>("");
+  const [showScoreSubmit, setShowScoreSubmit] = useState<boolean>(false);
+  const [isNewRecord, setIsNewRecord] = useState<boolean>(false);
+
   const [puzzleSize, setPuzzleSize] = useState({ width: 300, height: 300 });
+
+  const queryClient = useQueryClient();
+
+  // Fetch top scores
+  const { data: topScores = [] } = useQuery({
+    queryKey: ['/api/games/puzzle/scores'],
+    queryFn: async () => {
+      const response = await fetch('/api/games/puzzle/scores?limit=5');
+      if (!response.ok) throw new Error('Failed to fetch scores');
+      return response.json();
+    },
+  });
+
+  // Fetch all scores for results dialog
+  const { data: allScores = [] } = useQuery({
+    queryKey: ['/api/games/puzzle/all-scores'],
+    queryFn: async () => {
+      const response = await fetch('/api/games/puzzle/scores');
+      if (!response.ok) throw new Error('Failed to fetch all scores');
+      return response.json();
+    },
+  });
+
+  const submitScoreMutation = useMutation({
+    mutationFn: async (scoreData: { playerName: string; score: number; timeInSeconds: number }) => {
+      const res = await apiRequest("POST", "/api/games/scores", {
+        ...scoreData,
+        gameType: "puzzle",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/games/puzzle/scores'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/games/puzzle/all-scores'] });
+      setShowScoreSubmit(false);
+      setPlayerName("");
+    },
+  });
+
+  // Game Timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGameStarted && !isCompleted && !showPreview) {
+      interval = setInterval(() => {
+        setGameTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isGameStarted, isCompleted, showPreview]);
+
+  // Format time (MM:SS)
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Generate random puzzle
   const generatePuzzle = useCallback(() => {
@@ -192,6 +265,10 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
     setHand([]);
     setSelectedPieceId(null);
     setErrorCell(null);
+    setGameTime(0);
+    setIsGameStarted(false);
+    setIsNewRecord(false);
+    setShowScoreSubmit(false);
 
     const newPieces: PuzzlePiece[] = [];
 
@@ -236,6 +313,7 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
         if (prev <= 1) {
           clearInterval(countdownInterval);
           setShowPreview(false);
+          setIsGameStarted(true); // Start game/timer after preview
           // Initialize hand with 4 random pieces
           const allIds = newPieces.map(p => p.id);
           const shuffled = [...allIds].sort(() => 0.5 - Math.random());
@@ -271,7 +349,17 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
       setScore(prev => prev + 10);
       setPlacedCount(prev => {
         const newCount = prev + 1;
-        if (newCount === totalPieces) setIsCompleted(true);
+        if (newCount === totalPieces) {
+          setIsCompleted(true);
+          // Check for new record
+          // For puzzle, maybe fewer moves or just completion? Or score?
+          // Since it's fixed 20 pieces, score is mostly constant (unless penalties).
+          // Time is a good metric.
+          const isRecord = topScores.length === 0 || gameTime < (topScores[0]?.timeInSeconds || Infinity);
+          setIsNewRecord(isRecord);
+          // Show score submit regardless on completion
+          setShowScoreSubmit(true);
+        }
         return newCount;
       });
 
@@ -321,7 +409,12 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
         <div className="flex items-center gap-2 text-xs">
           <div className="flex items-center gap-1">
             <span className="font-bold">{score}</span>
-            <span className="text-muted-foreground">score</span>
+            <span className="text-muted-foreground">xal</span>
+          </div>
+          <div className="w-px h-3 bg-muted"></div>
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            <span className="font-bold">{formatTime(gameTime)}</span>
           </div>
           <div className="w-px h-3 bg-muted"></div>
           <div className="flex items-center gap-1">
@@ -329,9 +422,56 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
             <span className="text-muted-foreground">/ {totalPieces}</span>
           </div>
         </div>
-        <Button onClick={generatePuzzle} size="sm" variant="outline">
-          <Shuffle className="h-3 w-3" />
-        </Button>
+
+        <div className="flex gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <List className="h-3 w-3 mr-1" />
+                Nəticələr
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  Puzzle - Liderlər
+                </DialogTitle>
+              </DialogHeader>
+              <div className="mt-4">
+                {allScores.length > 0 ? (
+                  <div className="space-y-2">
+                    {allScores.map((score: any, index: number) => (
+                      <div key={score.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30 border">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-bold ${index < 3 ?
+                              index === 0 ? "text-yellow-500" :
+                                index === 1 ? "text-gray-400" :
+                                  "text-orange-500"
+                              : "text-muted-foreground"
+                            }`}>
+                            #{index + 1}
+                          </span>
+                          <span className="font-medium">{score.playerName}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-mono font-bold">{formatTime(score.timeInSeconds)}</div>
+                          <div className="text-xs text-muted-foreground">{score.score} xal</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">Hələ nəticə yoxdur</p>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Button onClick={generatePuzzle} size="sm" variant="outline">
+            <Shuffle className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
       {/* Preview Modal */}
@@ -339,7 +479,7 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="border-blue-500 max-w-md w-full">
             <CardContent className="p-6 text-center">
-              <h2 className="text-xl font-bold mb-4">Preview - {currentPattern}</h2>
+              <h2 className="text-xl font-bold mb-4">Hazırlaş - {currentPattern}</h2>
               {/* Simple preview visualization */}
               <div className="mb-4 flex justify-center">
                 <div className="w-48 h-60 bg-white rounded border-2 border-blue-500 overflow-hidden relative">
@@ -352,7 +492,7 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
                 </div>
               </div>
               <div className="text-2xl font-bold text-blue-500 mb-2">{countdown}</div>
-              <p className="text-sm text-muted-foreground">seconds remaining</p>
+              <p className="text-sm text-muted-foreground">saniyə qaldı</p>
             </CardContent>
           </Card>
         </div>
@@ -367,9 +507,44 @@ export default function PuzzleGame({ onBack }: PuzzleGameProps) {
               <h2 className="text-lg font-bold mb-2">Təbriklər!</h2>
               <div className="text-sm mb-4 space-y-1">
                 <p>Puzzle tamamlandı!</p>
+                <p>Vaxt: {formatTime(gameTime)}</p>
                 <p>Final Xal: {score}</p>
+                {isNewRecord && <p className="text-yellow-600 font-bold mt-1">🏆 Yeni Rekord!</p>}
               </div>
-              <Button onClick={generatePuzzle} size="sm" className="w-full">
+
+              {/* Score Submission Form */}
+              {showScoreSubmit && (
+                <div className="mb-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <Input
+                      placeholder="Adınızı daxil edin"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value)}
+                      className="flex-1"
+                      maxLength={20}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (playerName.trim()) {
+                        submitScoreMutation.mutate({
+                          playerName: playerName.trim(),
+                          score: score,
+                          timeInSeconds: gameTime,
+                        });
+                      }
+                    }}
+                    disabled={!playerName.trim() || submitScoreMutation.isPending}
+                    size="sm"
+                    className="w-full mb-2"
+                  >
+                    {submitScoreMutation.isPending ? "Yadda saxlanılır..." : "Nəticəni Yadda Saxla"}
+                  </Button>
+                </div>
+              )}
+
+              <Button onClick={generatePuzzle} size="sm" className="w-full" variant="outline">
                 Yeni Oyun
               </Button>
             </CardContent>
