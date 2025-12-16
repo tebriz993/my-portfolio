@@ -5,6 +5,8 @@ publish = "dist/public"
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["pg"]
 
 [[redirects]]
   from = "/api/*"
