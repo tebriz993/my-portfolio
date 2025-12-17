@@ -1,4 +1,4 @@
-import express, { Router } from "express";
+import express from "express";
 import serverless from "serverless-http";
 import { registerRoutes } from "../../server/routes";
 
@@ -7,41 +7,31 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Debugging middleware
+// CRITICAL FIX: Netlify strips /api from path when using :splat redirect
+// Incoming path from Netlify: /games/scores
+// Expected by routes: /api/games/scores
+// We need to add /api prefix back
 app.use((req, res, next) => {
-    console.log(`[Netlify Function] ${req.method} ${req.path}`);
-    console.log(`[Netlify Function] Original URL: ${req.originalUrl}`);
+    console.log(`[Netlify] Original: ${req.method} ${req.url}`);
+
+    if (!req.url.startsWith('/api')) {
+        req.url = '/api' + req.url;
+        console.log(`[Netlify] Rewritten: ${req.method} ${req.url}`);
+    }
     next();
 });
 
-// Create a router for the API
-const router = Router();
+// Register routes directly to app
+registerRoutes(app);
 
-router.get('/hello', (req, res) => {
-    res.json({ message: "Hello from Netlify Function!" });
-});
-
-// Register existing routes to the Router instead of the App
-// This allows us to mount the router at the Netlify function path
-registerRoutes(router as any);
-
-// Mount the router so it handles requests starting with /.netlify/functions
-// When a request comes in as /.netlify/functions/api/x, the router sees /api/x
-// which matches the routes defined in registerRoutes
-app.use('/.netlify/functions', router);
-
-// Also mount at /api for local testing or direct access if rewrites behave differently
-app.use('/api', router);
-
-// Catch-all 404 handler for debugging (after routes)
+// Catch-all 404 handler for debugging
 app.use((req, res) => {
-    console.log(`[Netlify Function] 404 Not Found: ${req.method} ${req.path}`);
+    console.log(`[Netlify] 404: ${req.method} ${req.url}`);
     res.status(404).json({
         error: "Route not found",
         path: req.path,
-        originalUrl: req.originalUrl,
-        method: req.method,
-        message: "This response is from the Netlify Function express app"
+        url: req.url,
+        method: req.method
     });
 });
 
