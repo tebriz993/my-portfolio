@@ -17,6 +17,10 @@ app.use((req, res, next) => {
 // Create a router for the API
 const router = Router();
 
+router.get('/hello', (req, res) => {
+    res.json({ message: "Hello from Netlify Function!" });
+});
+
 // Register existing routes to the Router instead of the App
 // This allows us to mount the router at the Netlify function path
 registerRoutes(router as any);

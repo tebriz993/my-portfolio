@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 // Connection logging
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
+  console.warn("DATABASE_URL must be set. Did you forget to provision a database?");
 }
 
 if (process.env.NODE_ENV !== "production") {
@@ -16,11 +16,11 @@ if (process.env.NODE_ENV !== "production") {
 console.log(`Connecting to DB: ${process.env.DATABASE_URL?.split('@')[1] || 'Unknown Host'}`);
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
+  connectionString: process.env.DATABASE_URL || "postgres://user:pass@localhost:5432/db",
+  ssl: process.env.NODE_ENV === "production" ? {
     rejectUnauthorized: false,
     checkServerIdentity: () => undefined
-  }
+  } : undefined
 });
 export const db = drizzle({ client: pool, schema });
 
