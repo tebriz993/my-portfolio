@@ -171,11 +171,14 @@ export default function TicTacToeGame({ onBack }: TicTacToeProps) {
         }
     };
 
-    const { data: scores = [] } = useQuery<GameScore[]>({
+    const { data: scores = [], isError, error } = useQuery<GameScore[]>({
         queryKey: ["/api/games/tic-tac-toe/scores"],
         queryFn: async () => {
             const res = await fetch("/api/games/tic-tac-toe/scores");
-            if (!res.ok) throw new Error("Failed to fetch");
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || "Failed to fetch scores");
+            }
             return res.json();
         }
     });
@@ -201,7 +204,12 @@ export default function TicTacToeGame({ onBack }: TicTacToeProps) {
                             </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-2 mt-4">
-                            {scores.length > 0 ? (
+                            {isError ? (
+                                <div className="p-4 rounded-lg bg-destructive/10 text-destructive text-sm text-center">
+                                    <p className="font-bold mb-1">Failed to load scores</p>
+                                    <p>{error instanceof Error ? error.message : "Database connection error"}</p>
+                                </div>
+                            ) : scores.length > 0 ? (
                                 scores.map((score, i) => (
                                     <div key={score.id} className="flex justify-between items-center p-2 bg-muted/50 rounded-lg">
                                         <div className="flex items-center gap-3">

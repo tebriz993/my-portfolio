@@ -3,10 +3,32 @@ import { createServer, type Server } from "http";
 import { MailService } from '@sendgrid/mail';
 import { db } from "./db";
 import { gameScores, insertGameScoreSchema } from "@shared/schema";
-import { desc, asc, eq, and } from "drizzle-orm";
+import { desc, asc, eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Test database connection
+      const result = await db.execute(sql`SELECT 1`);
+
+      res.json({
+        status: "ok",
+        database: "connected",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Health check failed:", error);
+      res.status(500).json({
+        status: "error",
+        database: "disconnected",
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // GitHub API proxy endpoint
   app.get("/api/github/repos", async (req, res) => {
     try {
