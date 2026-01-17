@@ -9,7 +9,7 @@ import { trackEvent } from "@/lib/analytics";
 
 
 export function HeroSection() {
-  
+
   const scrollToContact = () => {
     const element = document.querySelector("#contact");
     if (element) {
@@ -20,7 +20,7 @@ export function HeroSection() {
   const downloadCV = () => {
     // Track CV download event
     trackEvent('download', 'cv', 'hero_section');
-    
+
     const link = document.createElement('a');
     link.href = '/Tabriz Latifov -- Software and DevSecOps Engineer.pdf';
     link.download = 'Tabriz Latifov -- Software and DevSecOps Engineer.pdf';

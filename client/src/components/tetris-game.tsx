@@ -102,7 +102,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
   const [playerName, setPlayerName] = useState<string>("");
   const [showScoreSubmit, setShowScoreSubmit] = useState<boolean>(false);
   const [isNewRecord, setIsNewRecord] = useState<boolean>(false);
-  
+
   const dropTimeRef = useRef<number>(INITIAL_DROP_TIME);
   const gameIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
@@ -172,12 +172,12 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
         if (piece.shape[y][x] !== 0) {
           const newX = piece.position.x + x + offset.x;
           const newY = piece.position.y + y + offset.y;
-          
+
           // Check boundaries
           if (newX < 0 || newX >= BOARD_WIDTH || newY >= BOARD_HEIGHT) {
             return false;
           }
-          
+
           // Check collision with existing pieces
           if (newY >= 0 && board[newY][newX] !== '') {
             return false;
@@ -243,7 +243,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
     if (!currentPiece) return;
 
     const newBoard = board.map(row => [...row]);
-    
+
     // Place piece on board
     for (let y = 0; y < currentPiece.shape.length; y++) {
       for (let x = 0; x < currentPiece.shape[y].length; x++) {
@@ -310,7 +310,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
     // Create new piece
     const newPieceType = nextPiece || getRandomTetromino();
     const newPiece = createTetromino(newPieceType);
-    
+
     // Check game over
     if (!isValidPosition(newPiece, newBoard)) {
       setIsGameOver(true);
@@ -384,7 +384,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
   const startGame = () => {
     const newBoard = Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(''));
     const firstPiece = createTetromino(getRandomTetromino());
-    
+
     setBoard(newBoard);
     setCurrentPiece(firstPiece);
     setNextPiece(getRandomTetromino());
@@ -419,7 +419,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
   // Render board with current piece
   const renderBoard = () => {
     const displayBoard = board.map(row => [...row]);
-    
+
     // Add current piece to display board
     if (currentPiece) {
       for (let y = 0; y < currentPiece.shape.length; y++) {
@@ -434,7 +434,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
         }
       }
     }
-    
+
     return displayBoard;
   };
 
@@ -442,42 +442,36 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
-      {/* Mobile Header - Compact */}
+      {/* Mobile Header - Snake-style Compact */}
       <div className="flex items-center justify-between p-3 bg-muted/20 border-b shrink-0">
         <Button variant="outline" size="sm" onClick={onBack}>
           ← Back
         </Button>
-        
-        {/* Game Stats - Inline */}
-        <div className="flex items-center gap-2 text-xs">
+
+        {/* Game Stats - Compact for mobile */}
+        <div className="flex items-center gap-2 text-sm">
           <div className="flex items-center gap-1">
             <span className="font-bold">{score}</span>
-            <span className="text-muted-foreground">score</span>
+            <span className="text-muted-foreground hidden sm:inline">score</span>
           </div>
-          <div className="w-px h-3 bg-muted"></div>
+          <div className="w-px h-4 bg-muted"></div>
           <div className="flex items-center gap-1">
             <span className="font-bold">{level}</span>
-            <span className="text-muted-foreground">level</span>
+            <span className="text-muted-foreground hidden sm:inline">lvl</span>
           </div>
-          <div className="w-px h-3 bg-muted"></div>
-          <div className="flex items-center gap-1">
-            <span className="font-bold">{linesCleared}</span>
-            <span className="text-muted-foreground">lines</span>
-          </div>
-          <div className="w-px h-3 bg-muted"></div>
-          <div className="flex items-center gap-1">
+          <div className="w-px h-4 bg-muted hidden sm:block"></div>
+          <div className="flex items-center gap-1 hidden sm:flex">
             <span className="font-bold text-green-500">{speedMultiplier.toFixed(1)}x</span>
-            <span className="text-muted-foreground">speed</span>
           </div>
         </div>
 
-        {/* Control Buttons - Compact */}
+        {/* Control Buttons - Always visible */}
         <div className="flex gap-1">
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
-                <List className="h-3 w-3 mr-1" />
-                Results
+                <List className="h-3 w-3 sm:mr-1" />
+                <span className="hidden sm:inline">Results</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -493,13 +487,12 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
                     {allScores.map((score: any, index: number) => (
                       <div key={score.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30 border">
                         <div className="flex items-center gap-3">
-                          <span className={`text-sm font-bold ${
-                            index < 3 ? 
-                              index === 0 ? "text-yellow-500" : 
-                              index === 1 ? "text-gray-400" : 
-                              "text-orange-500" 
-                            : "text-muted-foreground"
-                          }`}>
+                          <span className={`text-sm font-bold ${index < 3 ?
+                              index === 0 ? "text-yellow-500" :
+                                index === 1 ? "text-gray-400" :
+                                  "text-orange-500"
+                              : "text-muted-foreground"
+                            }`}>
                             #{index + 1}
                           </span>
                           <span className="font-medium">{score.playerName}</span>
@@ -518,7 +511,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
             </DialogContent>
           </Dialog>
           {!isPlaying && !isGameOver ? (
-            <Button onClick={startGame} size="sm">
+            <Button onClick={startGame} size="sm" className="bg-green-600 hover:bg-green-700">
               Start
             </Button>
           ) : (
@@ -528,6 +521,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
           )}
         </div>
       </div>
+
 
       {/* Game Over Modal with Score Submission */}
       {isGameOver && (
@@ -544,7 +538,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
                 <p>Lines Cleared: {linesCleared}</p>
                 {isNewRecord && <p className="text-yellow-600 font-semibold">New Record!</p>}
               </div>
-              
+
               {/* Score Submission Form */}
               {showScoreSubmit && (
                 <div className="mb-4 space-y-3">
@@ -575,7 +569,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
                   </Button>
                 </div>
               )}
-              
+
               <Button onClick={resetGame} size="sm" className="w-full">
                 Play Again
               </Button>
@@ -589,7 +583,7 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
         {/* Next Piece Preview - Top Left Corner */}
         <Card className="absolute top-4 left-4 p-2 z-10">
           <div className="text-xs font-semibold mb-1 text-center">Next</div>
-          <div 
+          <div
             className="grid bg-gray-900 border rounded"
             style={{
               gridTemplateColumns: 'repeat(4, 12px)',
@@ -614,8 +608,8 @@ export default function TetrisGame({ onBack }: TetrisGameProps) {
         </Card>
 
         {/* Main Game Board */}
-        <div 
-          className="grid border-2 border-muted bg-black rounded-lg" 
+        <div
+          className="grid border-2 border-muted bg-black rounded-lg"
           style={{
             gridTemplateColumns: `repeat(${BOARD_WIDTH}, minmax(0, 1fr))`,
             width: `min(75vw, 70vh - 120px, 350px)`,

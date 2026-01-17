@@ -134,7 +134,7 @@ export function ContactSection() {
                   <div>
                     <p className="font-medium text-white">LinkedIn</p>
                     <a
-                      href="https://linkedin.com/in/tabriz-latifov"
+                      href="https://www.linkedin.com/in/tabriz-latifov-544307260/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-muted-foreground hover:text-primary transition-colors"
@@ -144,6 +144,7 @@ export function ContactSection() {
                     </a>
                   </div>
                 </div>
+
               </div>
             </div>
 
