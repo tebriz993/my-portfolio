@@ -1,30 +1,31 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { sql } from "drizzle-orm"; // Imported for default(sql`CURRENT_TIMESTAMP`)
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
 
-export const contacts = pgTable("contacts", {
-  id: serial("id").primaryKey(),
+export const contacts = sqliteTable("contacts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   email: text("email").notNull(),
   subject: text("subject").notNull(),
   message: text("message").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const gameScores = pgTable("game_scores", {
-  id: serial("id").primaryKey(),
+export const gameScores = sqliteTable("game_scores", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   playerName: text("player_name").notNull(),
   gameType: text("game_type").notNull(), // "memory", "snake", "tetris", "puzzle"
   score: integer("score").notNull(),
   timeInSeconds: integer("time_in_seconds"), // For memory game - lower is better
   level: integer("level"), // For tetris and snake
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -56,3 +57,4 @@ export type InsertContact = z.infer<typeof insertContactSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertGameScore = z.infer<typeof insertGameScoreSchema>;
 export type GameScore = typeof gameScores.$inferSelect;
+

@@ -1,0 +1,9 @@
+name = "tabriz-portfolio"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tabriz-portfolio-db"
+database_id = "1c31c22d-4f2c-4e45-8f84-79f6441df9b4"
+migrations_dir = "drizzle"
