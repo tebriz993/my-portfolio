@@ -4,6 +4,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "tabriz-portfolio-db"
-database_id = "1c31c22d-4f2c-4e45-8f84-79f6441df9b4"
+database_name = "tabriz-latifov-portfolio-db"
+database_id = "f1f90679-2a9a-4466-aa78-10a241895044"
 migrations_dir = "drizzle"
