@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Mail, Phone, Linkedin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
-import emailjs from '@emailjs/browser';
 
 export function ContactSection() {
   const [formData, setFormData] = useState({
@@ -35,37 +34,19 @@ export function ContactSection() {
       // Track form submission attempt
       trackEvent('form', 'contact', 'submit_attempt');
 
-      // Check if EmailJS environment variables are available
-      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
-      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
-      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
-
-      if (!serviceId || !templateId || !publicKey) {
-        throw new Error('EmailJS configuration is missing');
-      }
-
-      // Send email using EmailJS
-      const result = await emailjs.send(
-        serviceId,
-        templateId,
-        {
-          from_name: formData.name,
-          from_email: formData.email,
-          subject: formData.subject,
-          message: formData.message,
-          to_email: 'latifovtebriz@gmail.com',
-          reply_to: formData.email,
-          original_subject: formData.subject,
-          user_name: formData.name,
-          user_email: formData.email,
-          name: formData.name,
-          email: formData.email,
+      // Send email via backend API
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        publicKey
-      );
+        body: JSON.stringify(formData),
+      });
 
-      if (result.status !== 200) {
-        throw new Error('Failed to send email');
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || result.error || 'Failed to send email');
       }
 
       // Track successful submission
@@ -97,6 +78,7 @@ export function ContactSection() {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <section id="contact" className="section-padding bg-muted/50">
@@ -151,9 +133,9 @@ export function ContactSection() {
                   </div>
                   <div>
                     <p className="font-medium text-white">LinkedIn</p>
-                    <a 
-                      href="https://linkedin.com/in/tabriz-latifov" 
-                      target="_blank" 
+                    <a
+                      href="https://linkedin.com/in/tabriz-latifov"
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-muted-foreground hover:text-primary transition-colors"
                       onClick={() => trackEvent('click', 'social_media', 'linkedin_contact')}
