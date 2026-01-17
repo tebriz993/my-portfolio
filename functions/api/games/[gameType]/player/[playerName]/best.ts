@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
-import { gameScores } from "../../../../../shared/schema";
+import { gameScores } from "../../../../../../shared/schema";
 import { eq, desc, asc, and } from "drizzle-orm";
+
 
 export const onRequestGet: PagesFunction<{ DB: D1Database }> = async (context) => {
     try {
