@@ -173,13 +173,15 @@ export default function ReactionTimeGame({ onBack }: ReactionTimeGameProps) {
           </Dialog>
         </div>
 
-        {bestScore !== null && (
+        {/* Show all-time best from database */}
+        {scores.length > 0 && (
           <div className="flex items-center gap-2 text-primary font-bold">
             <Trophy className="h-5 w-5 text-yellow-500" />
-            Best: {bestScore}ms
+            Best: {Math.min(...scores.map(s => s.score))}ms
           </div>
         )}
       </div>
+
 
       <Card className="w-full">
         <CardHeader>

@@ -23,8 +23,9 @@ const DINO_WIDTH = 65;  // Increased from 40 -> 55 -> 65 for MUCH better visibil
 const DINO_HEIGHT = 65; // Increased from 40 -> 55 -> 65 - birds MUST hit now!
 const GROUND_HEIGHT = 20;
 const GRAVITY = 1.0;
-const JUMP_FORCE = -20;
+const JUMP_FORCE = -15; // Increased to -15 for 1.05x height
 const GAME_SPEED = 4;
+
 
 export default function DinoGame({ onBack }: DinoGameProps) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -34,7 +35,9 @@ export default function DinoGame({ onBack }: DinoGameProps) {
   const [dinoVelocityY, setDinoVelocityY] = useState(0);
   const [isJumping, setIsJumping] = useState(false);
   const [isDucking, setIsDucking] = useState(false);
+  const [dinoLegState, setDinoLegState] = useState(0); // 0 or 1 for running animation
   const dinoVelocityRef = useRef(0);
+  const dinoLegTickRef = useRef(0);
   const dinoYRef = useRef(GAME_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [gameSpeed, setGameSpeed] = useState(GAME_SPEED);
@@ -137,6 +140,13 @@ export default function DinoGame({ onBack }: DinoGameProps) {
 
     // Update score
     setScore(prev => prev + 1);
+
+    // Update leg animation (every 10 frames)
+    dinoLegTickRef.current++;
+    if (dinoLegTickRef.current >= 10) {
+      dinoLegTickRef.current = 0;
+      setDinoLegState(prev => (prev === 0 ? 1 : 0));
+    }
 
     // Increase game speed gradually
     setGameSpeed(prev => Math.min(prev + 0.001, 8));
@@ -519,36 +529,108 @@ export default function DinoGame({ onBack }: DinoGameProps) {
           </div>
 
 
-          {/* Dino */}
+          {/* Dino - Cartoon Style */}
           <div
-            className="absolute rounded transition-all duration-75 flex items-center justify-center font-bold text-2xl"
+            className="absolute flex items-center justify-end"
             style={{
               left: 50,
-              bottom: GAME_HEIGHT - dinoY - (isDucking ? DINO_HEIGHT / 2 : DINO_HEIGHT),
+              bottom: GAME_HEIGHT - dinoY - DINO_HEIGHT,
               width: DINO_WIDTH,
-              height: isDucking ? DINO_HEIGHT / 2 : DINO_HEIGHT
+              height: DINO_HEIGHT
             }}
           >
             {isDucking ? (
-              <svg width="24" height="16" viewBox="0 0 32 16" fill="currentColor" className="text-green-700 dark:text-green-400">
-                <g>
-                  <rect x="8" y="8" width="16" height="8" rx="2" />
-                  <rect x="20" y="6" width="6" height="4" rx="1" />
-                  <rect x="6" y="12" width="4" height="4" />
-                  <rect x="22" y="12" width="4" height="4" />
-                  <circle cx="22" cy="8" r="1" />
-                </g>
+              // Ducking - Ayaqlar yerdə, yalnız baş aşağı
+              <svg width="64" height="64" viewBox="0 0 70 70" fill="none" className="w-full h-full">
+                {/* Quyruq - bədənə bitişik */}
+                <path d="M 12 30 Q 10 24 14 26 L 24 40 L 16 34 Z" fill="#10b981" />
+
+                {/* Arxa ayaq - YER SƏVİYYƏSİNDƏ */}
+                <rect x="16" y="54" width="7" height="16" rx="3" fill="#059669" />
+                <ellipse cx="19.5" cy="66" rx="5" ry="4" fill="#047857" />
+
+                {/* Ön ayaq - YER SƏVİYYƏSİNDƏ */}
+                <rect x="36" y="54" width="7" height="16" rx="3" fill="#059669" />
+                <ellipse cx="39.5" cy="66" rx="5" ry="4" fill="#047857" />
+
+                {/* Bədən - horizontal, ayaqların üstündə */}
+                <ellipse cx="28" cy="48" rx="18" ry="12" fill="#10b981" />
+
+                {/* Boyun - irəli və aşağı */}
+                <path d="M 44 45 Q 50 48 54 52" stroke="#10b981" strokeWidth="10" fill="none" strokeLinecap="round" />
+
+                {/* Baş - aşağıda, yerə yaxın */}
+                <ellipse cx="58" cy="56" rx="10" ry="9" fill="#10b981" />
+
+                {/* Göz */}
+                <circle cx="62" cy="54" r="3" fill="white" />
+                <circle cx="62.5" cy="54" r="1.5" fill="black" />
+
+                {/* Gülümsəmə */}
+                <path d="M 62 58 Q 64 60 66 58" stroke="#059669" strokeWidth="2" fill="none" strokeLinecap="round" />
+
+                {/* Kiçik qollar - görünən */}
+                <ellipse cx="42" cy="46" rx="3" ry="5" fill="#059669" />
+                <rect x="40" y="44" width="6" height="3" rx="1.5" fill="#059669" />
+
+                {/* Arxa lələkləri */}
+                <path d="M 20 38 L 22 34 L 24 38" fill="#059669" />
+                <path d="M 24 42 L 26 38 L 28 42" fill="#059669" />
               </svg>
             ) : (
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor" className="text-green-700 dark:text-green-400">
-                <g>
-                  <rect x="10" y="8" width="12" height="20" rx="2" />
-                  <rect x="18" y="6" width="8" height="6" rx="1" />
-                  <rect x="8" y="24" width="4" height="4" />
-                  <rect x="20" y="24" width="4" height="4" />
-                  <circle cx="22" cy="9" r="1" />
-                  <rect x="6" y="12" width="8" height="3" rx="1" />
+              // Standing - Sevimli cartoon dino
+              <svg width="64" height="64" viewBox="0 0 64 80" fill="none" className="w-full h-full">
+                {/* Quyruq - qısa və yuxarı (pixel style) */}
+                <path d="M 14 50 L 8 44 L 12 52 Z" fill="#10b981" />
+
+                {/* Arxa ayaq - Running animation */}
+                <g transform={!isJumping && dinoLegState === 0 ? "translate(0, -4)" : "translate(0, 0)"}>
+                  <rect x="16" y="64" width="7" height="16" rx="3" fill="#059669" />
+                  <ellipse cx="19.5" cy="76" rx="5" ry="4" fill="#047857" />
                 </g>
+
+                {/* Ön ayaq - Running animation */}
+                <g transform={!isJumping && dinoLegState === 1 ? "translate(0, -4)" : "translate(0, 0)"}>
+                  <rect x="28" y="64" width="7" height="16" rx="3" fill="#059669" />
+                  <ellipse cx="31.5" cy="76" rx="5" ry="4" fill="#047857" />
+                </g>
+
+                {/* Bədən */}
+                <ellipse cx="24" cy="50" rx="13" ry="18" fill="#10b981" />
+
+                {/* Qarın */}
+                <ellipse cx="24" cy="54" rx="9" ry="12" fill="#34d399" opacity="0.5" />
+
+                {/* Boyun */}
+                <path d="M 32 42 Q 36 34 40 30" stroke="#10b981" strokeWidth="9" fill="none" strokeLinecap="round" />
+
+                {/* Baş */}
+                <ellipse cx="44" cy="24" rx="12" ry="11" fill="#10b981" />
+
+                {/* Göz - böyük və sevimli */}
+                <ellipse cx="48" cy="22" rx="5" ry="4" fill="white" />
+                <circle cx="49" cy="22" r="2.5" fill="black" />
+                <circle cx="49.5" cy="21" r="1" fill="white" />
+
+                {/* İkinci göz (profil) */}
+                <ellipse cx="40" cy="24" rx="4" ry="3" fill="white" />
+                <circle cx="41" cy="24" r="2" fill="black" />
+
+                {/* Burun */}
+                <circle cx="52" cy="26" r="1.5" fill="#059669" />
+
+                {/* Gülümsəmə */}
+                <path d="M 46 28 Q 48 31 52 28" stroke="#059669" strokeWidth="2" fill="none" strokeLinecap="round" />
+
+                {/* Kiçik qollar - daha görünən */}
+                <ellipse cx="30" cy="40" rx="3" ry="6" fill="#059669" />
+                <rect x="28" y="38" width="8" height="3" rx="1.5" fill="#059669" />
+                <ellipse cx="22" cy="42" rx="2.5" ry="5" fill="#059669" />
+
+                {/* Arxa lələklər */}
+                <path d="M 16 44 L 18 40 L 20 44" fill="#059669" />
+                <path d="M 20 48 L 22 44 L 24 48" fill="#059669" />
+                <path d="M 22 52 L 24 48 L 26 52" fill="#059669" />
               </svg>
             )}
           </div>
@@ -557,10 +639,7 @@ export default function DinoGame({ onBack }: DinoGameProps) {
           {obstacles.map((obstacle, index) => (
             <div
               key={index}
-              className={`absolute ${obstacle.type === 'cactus'
-                ? 'bg-green-800 dark:bg-green-600'
-                : 'bg-gray-600 dark:bg-gray-400'
-                } flex items-center justify-center text-white font-bold`}
+              className="absolute flex items-center justify-center"
               style={{
                 left: obstacle.x,
                 bottom: obstacle.type === 'cactus' ? GROUND_HEIGHT : GROUND_HEIGHT + 45,
@@ -568,9 +647,50 @@ export default function DinoGame({ onBack }: DinoGameProps) {
                 height: obstacle.height
               }}
             >
-              {obstacle.type === 'cactus' ? '🌵' : '🦅'}
+              {obstacle.type === 'cactus' ? (
+                // Cactus SVG
+                <svg width="100%" height="100%" viewBox="0 0 40 60" fill="none">
+                  {/* Main stem */}
+                  <rect x="14" y="10" width="12" height="50" rx="6" fill="#15803d" />
+                  {/* Left arm */}
+                  <path d="M 14 25 Q 8 25 8 30 L 8 35 Q 8 37 10 37 L 14 37" fill="#15803d" />
+                  {/* Right arm */}
+                  <path d="M 26 30 Q 32 30 32 35 L 32 40 Q 32 42 30 42 L 26 42" fill="#15803d" />
+                  {/* Spikes */}
+                  <path d="M 16 15 L 18 12 L 20 15" fill="#166534" />
+                  <path d="M 16 25 L 18 22 L 20 25" fill="#166534" />
+                  <path d="M 16 35 L 18 32 L 20 35" fill="#166534" />
+                  <path d="M 16 45 L 18 42 L 20 45" fill="#166534" />
+                  {/* Flower */}
+                  <circle cx="20" cy="8" r="3" fill="#f472b6" />
+                  <circle cx="18" cy="6" r="2" fill="#f472b6" />
+                  <circle cx="22" cy="6" r="2" fill="#f472b6" />
+                  <circle cx="20" cy="7" r="1.5" fill="#fef08a" />
+                </svg>
+              ) : (
+                // Bird SVG - səmtə doğru baxır
+                <svg width="100%" height="100%" viewBox="0 0 50 40" fill="none">
+                  {/* Body */}
+                  <ellipse cx="25" cy="20" rx="12" ry="10" fill="#475569" />
+                  {/* Head - sağa baxır */}
+                  <circle cx="15" cy="16" r="8" fill="#475569" />
+                  {/* Wing - sağ tərəfdə */}
+                  <path d="M 32 18 Q 42 12 44 16 Q 42 20 32 22" fill="#64748b" />
+                  {/* Tail feathers - solda */}
+                  <path d="M 37 20 L 42 18 L 40 22 Z" fill="#64748b" />
+                  <path d="M 37 22 L 42 24 L 40 20 Z" fill="#64748b" />
+                  {/* Eye - sağa baxır */}
+                  <circle cx="13" cy="14" r="2" fill="white" />
+                  <circle cx="12.5" cy="14" r="1" fill="black" />
+                  {/* Beak - sağa */}
+                  <path d="M 10 16 L 5 15 L 10 18 Z" fill="#f97316" />
+                  {/* Belly */}
+                  <ellipse cx="25" cy="22" rx="8" ry="6" fill="#94a3b8" opacity="0.6" />
+                </svg>
+              )}
             </div>
           ))}
+
 
           {/* Instructions */}
           {!isPlaying && !isGameOver && (

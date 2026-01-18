@@ -68,8 +68,13 @@ const CHARACTERS = [
 ];
 
 export default function HeadBallGame({ onBack }: HeadBallGameProps) {
-  const [gameState, setGameState] = useState<'menu' | 'playing' | 'paused' | 'gameOver'>('menu');
-  const [gameMode, setGameMode] = useState<'ai' | 'local'>('ai');
+  const [gameState, setGameState] = useState<'menu' | 'playing' | 'paused' | 'gameOver' | 'lobby'>('menu');
+  const [gameMode, setGameMode] = useState<'ai' | 'local' | 'online'>('ai');
+  const [roomCode, setRoomCode] = useState<string>("");
+  const [joinCode, setJoinCode] = useState<string>("");
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>("disconnected");
+  const wsRef = useRef<WebSocket | null>(null);
   const [matchTime, setMatchTime] = useState<number>(60); // seconds
   const [timeLeft, setTimeLeft] = useState<number>(60);
   const [player1, setPlayer1] = useState<Player>({
@@ -114,13 +119,13 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     radius: 15,
     speed: 1
   });
-  
+
   const [keys, setKeys] = useState<Set<string>>(new Set());
-  const [powerUpCooldowns, setPowerUpCooldowns] = useState<{[key: string]: number}>({});
+  const [powerUpCooldowns, setPowerUpCooldowns] = useState<{ [key: string]: number }>({});
   const [lastGoalScorer, setLastGoalScorer] = useState<'player1' | 'player2' | null>(null);
   const [playerName, setPlayerName] = useState<string>("");
   const [showScoreSubmit, setShowScoreSubmit] = useState<boolean>(false);
-  
+
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
 
@@ -163,6 +168,116 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     },
   });
 
+  // WebSocket Connection Logic
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/headball/ws`;
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('Connected to WebSocket');
+      setConnectionStatus('connected');
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+
+      switch (message.type) {
+        case 'ROOM_CREATED':
+          setRoomCode(message.payload.code);
+          setGameState('lobby');
+          setIsHost(true);
+          break;
+
+        case 'GAME_START':
+          setGameState('playing');
+          startGame('online');
+          setIsHost(message.payload.role === 'player1');
+          if (message.payload.role === 'player2') {
+            // Client setup if needed
+          }
+          break;
+
+        case 'GAME_STATE':
+          if (!isHost && gameMode === 'online') {
+            // Apply state from host
+            const state = message.payload;
+            setPlayer1(state.player1);
+            setPlayer2(state.player2);
+            setBall(state.ball);
+            setTimeLeft(state.timeLeft);
+            // setScore({ p1: state.player1.score, p2: state.player2.score });
+          }
+          break;
+
+        case 'PLAYER_INPUT':
+          if (isHost && gameMode === 'online') {
+            // Host applies client inputs
+            // We'll store these in a ref or state map to apply in gameLoop
+            // For simplicity, directly updating keys set for p2
+            // This part needs careful handling in gameLoop
+            // We will simulate "keys" for player 2 based on input
+            const input = message.payload;
+            // Logic to handle remote input - see gameLoop update
+            handleRemoteInput(input);
+          }
+          break;
+
+        case 'PLAYER_DISCONNECTED':
+          alert('Opponent disconnected');
+          resetGame();
+          break;
+
+        case 'ERROR':
+          alert(message.payload.message);
+          break;
+      }
+    };
+
+    ws.onclose = () => {
+      setConnectionStatus('disconnected');
+    };
+  }, [isHost, gameMode]);
+
+  const handleRemoteInput = (input: { key: string, type: 'down' | 'up' }) => {
+    // This is a simplified way to handle remote inputs. 
+    // Ideally we'd separate input handling from the key set.
+    // But for P2 physics on Host, we can check a separate "remoteKeys" set.
+    setRemoteKeys(prev => {
+      const newKeys = new Set(prev);
+      if (input.type === 'down') newKeys.add(input.key);
+      else newKeys.delete(input.key);
+      return newKeys;
+    });
+  };
+
+  const [remoteKeys, setRemoteKeys] = useState<Set<string>>(new Set());
+
+
+  const createRoom = () => {
+    connectWebSocket();
+    setTimeout(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'CREATE_ROOM' }));
+      }
+    }, 500); // Small delay to ensure connection
+  };
+
+  const joinRoom = () => {
+    if (joinCode.length !== 6) return;
+    connectWebSocket();
+    setTimeout(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'JOIN_ROOM', payload: { code: joinCode } }));
+      }
+    }, 500);
+  };
+
+
   // Reset ball to center
   const resetBall = useCallback(() => {
     setBall({
@@ -180,26 +295,26 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     const dx = ball.x - (player.x + player.width / 2);
     const dy = ball.y - (player.y + player.height / 2);
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     return distance < ball.radius + Math.min(player.width, player.height) / 2;
   }, []);
 
   // Check goal collision
   const checkGoal = useCallback((ball: Ball) => {
     // Left goal
-    if (ball.x - ball.radius <= GOAL_WIDTH && 
-        ball.y >= GAME_HEIGHT - GROUND_HEIGHT - GOAL_HEIGHT && 
-        ball.y <= GAME_HEIGHT - GROUND_HEIGHT) {
+    if (ball.x - ball.radius <= GOAL_WIDTH &&
+      ball.y >= GAME_HEIGHT - GROUND_HEIGHT - GOAL_HEIGHT &&
+      ball.y <= GAME_HEIGHT - GROUND_HEIGHT) {
       return 'player2';
     }
-    
+
     // Right goal
-    if (ball.x + ball.radius >= GAME_WIDTH - GOAL_WIDTH && 
-        ball.y >= GAME_HEIGHT - GROUND_HEIGHT - GOAL_HEIGHT && 
-        ball.y <= GAME_HEIGHT - GROUND_HEIGHT) {
+    if (ball.x + ball.radius >= GAME_WIDTH - GOAL_WIDTH &&
+      ball.y >= GAME_HEIGHT - GROUND_HEIGHT - GOAL_HEIGHT &&
+      ball.y <= GAME_HEIGHT - GROUND_HEIGHT) {
       return 'player1';
     }
-    
+
     return null;
   }, []);
 
@@ -220,7 +335,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       } else if (ballCenterX < playerCenterX - 10) {
         newPlayer.velocityX = Math.max(-newPlayer.speed, newPlayer.velocityX - 0.5);
       }
-      
+
       // Jump if ball is close and above
       if (distanceToBall < 50 && ball.y < player.y && player.onGround) {
         newPlayer.velocityY = -newPlayer.jumpPower;
@@ -294,9 +409,32 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const gameLoop = useCallback(() => {
     if (gameState !== 'playing') return;
 
+    // ONLINE LOGIC
+    if (gameMode === 'online') {
+      if (isHost) {
+        // Host runs physics and broadcasting
+        // (Physics continues below normally)
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: 'GAME_STATE',
+            payload: {
+              player1,
+              player2,
+              ball,
+              timeLeft
+            }
+          }));
+        }
+      } else {
+        // Client just renders state (updated via onmessage)
+        return;
+      }
+    }
+
+
     setPlayer1(prev => {
       let newPlayer = { ...prev };
-      
+
       // Handle power-up duration
       if (newPlayer.powerUpDuration > 0) {
         newPlayer.powerUpDuration -= 16; // ~60fps
@@ -304,7 +442,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           newPlayer.powerUpActive = null;
         }
       }
-      
+
       // Handle input (only if not frozen)
       if (newPlayer.powerUpActive !== 'frozen') {
         if (keys.has('a') || keys.has('ArrowLeft')) {
@@ -318,34 +456,34 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           newPlayer.onGround = false;
         }
       }
-      
+
       // Apply speed boost
       const speedMultiplier = newPlayer.powerUpActive === 'speed' ? 1.5 : 1;
       newPlayer.velocityX *= speedMultiplier;
-      
+
       // Physics
       newPlayer.velocityX *= 0.8; // Friction
       newPlayer.velocityY += 0.8; // Gravity
-      
+
       newPlayer.x += newPlayer.velocityX;
       newPlayer.y += newPlayer.velocityY;
-      
+
       // Boundaries
       if (newPlayer.x < 0) newPlayer.x = 0;
       if (newPlayer.x > GAME_WIDTH / 2 - newPlayer.width) newPlayer.x = GAME_WIDTH / 2 - newPlayer.width;
-      
+
       if (newPlayer.y >= GAME_HEIGHT - GROUND_HEIGHT - newPlayer.height) {
         newPlayer.y = GAME_HEIGHT - GROUND_HEIGHT - newPlayer.height;
         newPlayer.velocityY = 0;
         newPlayer.onGround = true;
       }
-      
+
       return newPlayer;
     });
 
     setPlayer2(prev => {
       let newPlayer = updateAI(prev, ball, player1);
-      
+
       // Handle power-up duration
       if (newPlayer.powerUpDuration > 0) {
         newPlayer.powerUpDuration -= 16;
@@ -353,7 +491,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           newPlayer.powerUpActive = null;
         }
       }
-      
+
       // Handle local multiplayer input for player 2
       if (gameMode === 'local' && newPlayer.powerUpActive !== 'frozen') {
         if (keys.has('j')) {
@@ -367,39 +505,54 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           newPlayer.onGround = false;
         }
       }
-      
+
+      // Handle ONLINE input for player 2 (Host side)
+      if (gameMode === 'online' && isHost && newPlayer.powerUpActive !== 'frozen') {
+        // Use remoteKeys
+        if (remoteKeys.has('a') || remoteKeys.has('arrowleft')) {
+          newPlayer.velocityX = Math.max(-newPlayer.speed, newPlayer.velocityX - 0.5);
+        }
+        if (remoteKeys.has('d') || remoteKeys.has('arrowright')) {
+          newPlayer.velocityX = Math.min(newPlayer.speed, newPlayer.velocityX + 0.5);
+        }
+        if ((remoteKeys.has('w') || remoteKeys.has('arrowup')) && newPlayer.onGround) {
+          newPlayer.velocityY = -newPlayer.jumpPower;
+          newPlayer.onGround = false;
+        }
+      }
+
       // Apply speed boost
       const speedMultiplier = newPlayer.powerUpActive === 'speed' ? 1.5 : 1;
       newPlayer.velocityX *= speedMultiplier;
-      
+
       // Physics
       newPlayer.velocityX *= 0.8;
       newPlayer.velocityY += 0.8;
-      
+
       newPlayer.x += newPlayer.velocityX;
       newPlayer.y += newPlayer.velocityY;
-      
+
       // Boundaries
       if (newPlayer.x < GAME_WIDTH / 2) newPlayer.x = GAME_WIDTH / 2;
       if (newPlayer.x > GAME_WIDTH - newPlayer.width) newPlayer.x = GAME_WIDTH - newPlayer.width;
-      
+
       if (newPlayer.y >= GAME_HEIGHT - GROUND_HEIGHT - newPlayer.height) {
         newPlayer.y = GAME_HEIGHT - GROUND_HEIGHT - newPlayer.height;
         newPlayer.velocityY = 0;
         newPlayer.onGround = true;
       }
-      
+
       return newPlayer;
     });
 
     setBall(prev => {
       let newBall = { ...prev };
-      
+
       // Ball physics
       newBall.velocityY += 0.5; // Gravity
       newBall.x += newBall.velocityX;
       newBall.y += newBall.velocityY;
-      
+
       // Ball boundaries
       if (newBall.x - newBall.radius <= 0 || newBall.x + newBall.radius >= GAME_WIDTH) {
         newBall.velocityX = -newBall.velocityX * 0.8;
@@ -412,7 +565,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       if (newBall.y - newBall.radius <= 0) {
         newBall.velocityY = -newBall.velocityY * 0.8;
       }
-      
+
       // Check collisions with players
       if (checkBallPlayerCollision(newBall, player1)) {
         const dx = newBall.x - (player1.x + player1.width / 2);
@@ -422,7 +575,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         newBall.velocityX = Math.cos(angle) * force;
         newBall.velocityY = Math.sin(angle) * force;
       }
-      
+
       if (checkBallPlayerCollision(newBall, player2)) {
         const dx = newBall.x - (player2.x + player2.width / 2);
         const dy = newBall.y - (player2.y + player2.height / 2);
@@ -431,7 +584,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         newBall.velocityX = Math.cos(angle) * force;
         newBall.velocityY = Math.sin(angle) * force;
       }
-      
+
       // Check goals
       const goal = checkGoal(newBall);
       if (goal) {
@@ -443,14 +596,14 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         setLastGoalScorer(goal);
         setTimeout(resetBall, 1000);
       }
-      
+
       return newBall;
     });
 
     // Update cooldowns
     setPowerUpCooldowns(prev => {
       const now = Date.now();
-      const updated: {[key: string]: number} = {};
+      const updated: { [key: string]: number } = {};
       for (const [key, value] of Object.entries(prev)) {
         if (value > now) {
           updated[key] = value;
@@ -459,13 +612,13 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       return updated;
     });
 
-  }, [gameState, keys, ball, player1, player2, checkBallPlayerCollision, checkGoal, resetBall, updateAI, gameMode]);
+  }, [gameState, keys, remoteKeys, ball, player1, player2, checkBallPlayerCollision, checkGoal, resetBall, updateAI, gameMode, isHost, timeLeft]);
 
   // Start game loop
   useEffect(() => {
     if (gameState === 'playing') {
       gameLoopRef.current = setInterval(gameLoop, 16); // ~60fps
-      
+
       // Game timer
       const timer = setInterval(() => {
         setTimeLeft(prev => {
@@ -488,15 +641,22 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      setKeys(prev => new Set([...Array.from(prev), e.key.toLowerCase()]));
-      
+      const key = e.key.toLowerCase();
+      setKeys(prev => new Set([...Array.from(prev), key]));
+
+      // ONLINE: Send input if client
+      if (gameMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'PLAYER_INPUT', payload: { key, type: 'down' } }));
+      }
+
+
       // Power-ups for player 1
       if (gameState === 'playing') {
         if (e.key === '1') usePowerUp('player1', 'freeze');
         if (e.key === '2') usePowerUp('player1', 'speed');
         if (e.key === '3') usePowerUp('player1', 'biggoal');
         if (e.key === '4') usePowerUp('player1', 'fireball');
-        
+
         // Power-ups for player 2 (local multiplayer)
         if (gameMode === 'local') {
           if (e.key === '7') usePowerUp('player2', 'freeze');
@@ -508,11 +668,17 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
       setKeys(prev => {
         const newKeys = new Set(Array.from(prev));
-        newKeys.delete(e.key.toLowerCase());
+        newKeys.delete(key);
         return newKeys;
       });
+
+      // ONLINE: Send input if client
+      if (gameMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'PLAYER_INPUT', payload: { key, type: 'up' } }));
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -524,7 +690,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     };
   }, [gameState, gameMode, usePowerUp]);
 
-  const startGame = (mode: 'ai' | 'local') => {
+  const startGame = (mode: 'ai' | 'local' | 'online') => {
     setGameMode(mode);
     setGameState('playing');
     setTimeLeft(matchTime);
@@ -584,13 +750,12 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                     {allScores.map((score: any, index: number) => (
                       <div key={score.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30 border">
                         <div className="flex items-center gap-3">
-                          <span className={`text-sm font-bold ${
-                            index < 3 ? 
-                              index === 0 ? "text-yellow-500" : 
-                              index === 1 ? "text-gray-400" : 
-                              "text-orange-500" 
+                          <span className={`text-sm font-bold ${index < 3 ?
+                            index === 0 ? "text-yellow-500" :
+                              index === 1 ? "text-gray-400" :
+                                "text-orange-500"
                             : "text-muted-foreground"
-                          }`}>
+                            }`}>
                             #{index + 1}
                           </span>
                           <span className="font-medium">{score.playerName}</span>
@@ -611,53 +776,82 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         </div>
 
         {/* Main Menu */}
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="max-w-2xl w-full space-y-8 text-center">
-            <div>
-              <h2 className="text-4xl font-bold mb-4">⚽ Head Ball</h2>
-              <p className="text-lg text-muted-foreground">
-                Physics-based football game with special powers!
-              </p>
-            </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="min-h-full flex flex-col items-center justify-center p-4 md:p-8">
+            <div className="max-w-2xl w-full space-y-8 text-center">
+              <div>
+                <h2 className="text-4xl font-bold mb-4">⚽ Head Ball</h2>
+                <p className="text-lg text-muted-foreground">
+                  Physics-based football game with special powers!
+                </p>
+              </div>
 
-            {/* Top Scores */}
-            <div className="bg-muted/20 rounded-lg p-4">
-              <h3 className="text-lg font-semibold mb-3">🏆 Top Scores</h3>
-              {topScores.length > 0 ? (
-                <div className="space-y-2">
-                  {topScores.slice(0, 3).map((score: any, index: number) => (
-                    <div key={score.id} className="flex items-center justify-between">
-                      <span className={index === 0 ? "text-yellow-500 font-bold" : ""}>
-                        #{index + 1} {score.playerName}
-                      </span>
-                      <span className="font-mono">{score.score}</span>
-                    </div>
-                  ))}
+              {/* Top Scores */}
+              <div className="bg-muted/20 rounded-lg p-4">
+                <h3 className="text-lg font-semibold mb-3">🏆 Top Scores</h3>
+                {topScores.length > 0 ? (
+                  <div className="space-y-2">
+                    {topScores.slice(0, 3).map((score: any, index: number) => (
+                      <div key={score.id} className="flex items-center justify-between">
+                        <span className={index === 0 ? "text-yellow-500 font-bold" : ""}>
+                          #{index + 1} {score.playerName}
+                        </span>
+                        <span className="font-mono">{score.score}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No scores yet - be the first!</p>
+                )}
+              </div>
+
+              {/* Game Mode Selection */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">Choose Game Mode</h3>
+                <div className="grid gap-4 max-w-md mx-auto">
+                  <Button
+                    onClick={() => startGame('ai')}
+                    size="lg"
+                    className="h-16 text-lg"
+                  >
+                    🤖 vs AI
+                  </Button>
+                  <Button
+                    onClick={() => startGame('local')}
+                    size="lg"
+                    variant="outline"
+                    className="h-16 text-lg"
+                  >
+                    👥 Local Multiplayer
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-muted-foreground">No scores yet - be the first!</p>
-              )}
-            </div>
 
-            {/* Game Mode Selection */}
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold">Choose Game Mode</h3>
-              <div className="grid gap-4 max-w-md mx-auto">
-                <Button 
-                  onClick={() => startGame('ai')} 
-                  size="lg" 
-                  className="h-16 text-lg"
-                >
-                  🤖 vs AI
-                </Button>
-                <Button 
-                  onClick={() => startGame('local')} 
-                  size="lg" 
-                  variant="outline"
-                  className="h-16 text-lg"
-                >
-                  👥 Local Multiplayer
-                </Button>
+                {/* Online Multiplayer Section */}
+                <div className="mt-8 border-t pt-6 bg-muted/10 p-4 rounded-lg">
+                  <h3 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+                    🌐 Online Multiplayer
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                    <div className="space-y-2">
+                      <Button onClick={createRoom} className="w-full bg-indigo-600 hover:bg-indigo-700">
+                        Create Game
+                      </Button>
+                      <p className="text-xs text-muted-foreground">Host a match and get a code</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Enter Code (e.g. 123456)"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value)}
+                        maxLength={6}
+                        className="text-center font-mono tracking-widest uppercase"
+                      />
+                      <Button onClick={joinRoom} variant="outline" className="w-full">
+                        Join Game
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -693,7 +887,36 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                 ))}
               </div>
             </div>
+
+
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Lobby Screen
+  if (gameState === 'lobby') {
+    return (
+      <div className="fixed inset-0 bg-background flex items-center justify-center p-8">
+        <div className="max-w-md w-full text-center space-y-8 bg-muted/20 p-8 rounded-xl border-2 border-dashed border-indigo-500/30">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">Waiting for Player...</h2>
+            <p className="text-muted-foreground">Share this code with your friend:</p>
+          </div>
+
+          <div className="py-6">
+            <div className="text-6xl font-mono font-bold tracking-widest text-indigo-400 bg-background/50 py-4 rounded-lg border-2 border-indigo-500/20 select-all">
+              {roomCode}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-sm text-yellow-500 animate-pulse">
+            <Zap className="h-4 w-4" />
+            <span>Waiting for connection...</span>
+          </div>
+
+          <Button variant="ghost" onClick={resetGame}>Cancel</Button>
         </div>
       </div>
     );
@@ -714,7 +937,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             </span>
           </div>
         </div>
-        
+
         <div className="text-center">
           <div className="flex items-center gap-4 text-lg font-bold">
             <span className="text-blue-500">{player1.score}</span>
@@ -737,7 +960,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
 
       {/* Game Area */}
       <div className="flex-1 flex items-center justify-center p-4">
-        <div 
+        <div
           className="relative bg-green-600 rounded-lg border-4 border-white overflow-hidden"
           style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}
         >
@@ -750,56 +973,54 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           </div>
 
           {/* Goals */}
-          <div 
+          <div
             className="absolute left-0 bg-gray-800 border-2 border-white"
-            style={{ 
-              width: GOAL_WIDTH, 
+            style={{
+              width: GOAL_WIDTH,
               height: GOAL_HEIGHT,
               bottom: GROUND_HEIGHT,
             }}
           ></div>
-          <div 
+          <div
             className="absolute right-0 bg-gray-800 border-2 border-white"
-            style={{ 
-              width: GOAL_WIDTH, 
+            style={{
+              width: GOAL_WIDTH,
               height: GOAL_HEIGHT,
               bottom: GROUND_HEIGHT,
             }}
           ></div>
 
           {/* Net */}
-          <div 
+          <div
             className="absolute bg-gray-700"
-            style={{ 
-              left: GOAL_WIDTH / 2, 
-              width: 2, 
+            style={{
+              left: GOAL_WIDTH / 2,
+              width: 2,
               height: NET_HEIGHT,
               bottom: GROUND_HEIGHT + GOAL_HEIGHT / 2,
             }}
           ></div>
-          <div 
+          <div
             className="absolute bg-gray-700"
-            style={{ 
-              right: GOAL_WIDTH / 2, 
-              width: 2, 
+            style={{
+              right: GOAL_WIDTH / 2,
+              width: 2,
               height: NET_HEIGHT,
               bottom: GROUND_HEIGHT + GOAL_HEIGHT / 2,
             }}
           ></div>
 
           {/* Ground */}
-          <div 
+          <div
             className="absolute bottom-0 left-0 right-0 bg-green-800"
             style={{ height: GROUND_HEIGHT }}
           ></div>
 
           {/* Player 1 */}
           <div
-            className={`absolute rounded-full ${player1.color} border-2 border-white flex items-center justify-center text-white font-bold transition-all duration-100 ${
-              player1.powerUpActive === 'frozen' ? 'opacity-50' : ''
-            } ${
-              player1.powerUpActive === 'speed' ? 'shadow-lg shadow-yellow-500' : ''
-            }`}
+            className={`absolute rounded-full ${player1.color} border-2 border-white flex items-center justify-center text-white font-bold transition-all duration-100 ${player1.powerUpActive === 'frozen' ? 'opacity-50' : ''
+              } ${player1.powerUpActive === 'speed' ? 'shadow-lg shadow-yellow-500' : ''
+              }`}
             style={{
               left: player1.x,
               top: player1.y,
@@ -817,11 +1038,9 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
 
           {/* Player 2 */}
           <div
-            className={`absolute rounded-full ${player2.color} border-2 border-white flex items-center justify-center text-white font-bold transition-all duration-100 ${
-              player2.powerUpActive === 'frozen' ? 'opacity-50' : ''
-            } ${
-              player2.powerUpActive === 'speed' ? 'shadow-lg shadow-yellow-500' : ''
-            }`}
+            className={`absolute rounded-full ${player2.color} border-2 border-white flex items-center justify-center text-white font-bold transition-all duration-100 ${player2.powerUpActive === 'frozen' ? 'opacity-50' : ''
+              } ${player2.powerUpActive === 'speed' ? 'shadow-lg shadow-yellow-500' : ''
+              }`}
             style={{
               left: player2.x,
               top: player2.y,
@@ -929,7 +1148,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             <CardContent className="p-6 text-center">
               <Trophy className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
               <h2 className="text-xl font-bold mb-2">Game Over!</h2>
-              
+
               <div className="mb-4 space-y-2">
                 <p className="text-lg">
                   Final Score: <span className="font-bold text-blue-500">{player1.score}</span> - <span className="font-bold text-red-500">{player2.score}</span>

@@ -5,6 +5,7 @@ import { db } from "./db";
 import { gameScores, insertGameScoreSchema } from "@shared/schema";
 import { desc, asc, eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
+import { setupWebSocket } from "./websocket";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
@@ -278,5 +279,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  setupWebSocket(httpServer);
   return httpServer;
 }

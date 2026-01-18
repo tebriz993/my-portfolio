@@ -13,6 +13,7 @@ import HeadBallGame from "../components/head-ball-game";
 import ReactionTimeGame from "../components/reaction-time-game";
 import TicTacToeGame from "../components/tic-tac-toe-game";
 import SudokuGame from "../components/sudoku-game";
+import CheckersGame from "../components/checkers-game";
 
 export default function Games() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
@@ -88,6 +89,13 @@ export default function Games() {
       icon: "🔢",
       component: SudokuGame,
     },
+    {
+      id: "checkers",
+      title: "Checkers",
+      description: "Classic strategy game. Play against a smart AI!",
+      icon: "🏁",
+      component: CheckersGame,
+    },
   ];
 
   if (selectedGame) {
@@ -146,9 +154,16 @@ export default function Games() {
             {games.map((game) => (
               <Card
                 key={game.id}
-                className="cursor-pointer hover:shadow-lg transition-shadow group"
+                className="cursor-pointer hover:shadow-lg transition-shadow group relative overflow-hidden"
                 onClick={() => setSelectedGame(game.id)}
               >
+                {game.id === 'head-ball' && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-1 rounded-full shadow-lg shadow-green-500/20 animate-pulse border border-white/20">
+                      Online
+                    </span>
+                  </div>
+                )}
                 <CardHeader className="text-center">
                   <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">
                     {game.icon}
@@ -160,13 +175,15 @@ export default function Games() {
                     {game.description}
                   </p>
 
-                  {(game.id === "dino-game" || game.id === "head-ball") && (
-                    <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded border-l-2 border-yellow-400">
-                      <p className="text-xs text-yellow-800 dark:text-yellow-200 text-center">
-                        Some improvements are in progress 🚧
-                      </p>
+                  {game.id === 'head-ball' && (
+                    <div className="text-center mb-4">
+                      <span className="text-[10px] text-yellow-600 bg-yellow-100 px-2 py-1 rounded border border-yellow-200 font-medium inline-block animate-pulse">
+                        🚧 some improvements are in progress
+                      </span>
                     </div>
                   )}
+
+
 
                   <Button className="w-full" variant="outline">
                     Play Now
