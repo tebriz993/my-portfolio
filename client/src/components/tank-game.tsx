@@ -800,24 +800,25 @@ export default function TankGame({ onBack }: TankGameProps) {
 
     return (
         <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 bg-muted/20 border-b shrink-0">
-                <Button variant="outline" size="sm" onClick={onBack}>
-                    ← Back
+            {/* Header - Responsive */}
+            <div className="flex flex-wrap items-center justify-between p-2 md:p-3 bg-muted/20 border-b shrink-0 gap-2">
+                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={onBack}>
+                    <span className="sr-only">Back</span>
+                    ←
                 </Button>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Level:</span>
-                        <span className="font-bold">{level}</span>
+                <div className="flex items-center gap-2 md:gap-4 text-sm overflow-x-auto no-scrollbar">
+                    <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
+                        <span className="hidden md:inline text-xs text-muted-foreground">Level:</span>
+                        <span className="font-bold">Lvl {level}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Score:</span>
-                        <span className="font-bold">{score}</span>
+                    <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
+                        <span className="hidden md:inline text-xs text-muted-foreground">Score:</span>
+                        <span className="font-bold">🎯 {score}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">HP:</span>
-                        <div className="w-20 h-3 bg-gray-600 rounded-full overflow-hidden border border-gray-500">
+                    <div className="flex items-center gap-1 md:gap-2">
+                        <span className="hidden md:inline text-xs text-muted-foreground">HP:</span>
+                        <div className="w-16 md:w-20 h-3 bg-gray-600 rounded-full overflow-hidden border border-gray-500 shrink-0">
                             <div
                                 className={`h-full transition-all ${playerTank.health > 30 ? 'bg-green-500' :
                                     playerTank.health > 15 ? 'bg-yellow-500' : 'bg-red-500'
@@ -825,16 +826,16 @@ export default function TankGame({ onBack }: TankGameProps) {
                                 style={{ width: `${(playerTank.health / PLAYER_MAX_HEALTH) * 100}%` }}
                             />
                         </div>
-                        <span className="text-xs font-bold min-w-[40px]">{playerTank.health}/{PLAYER_MAX_HEALTH}</span>
+                        <span className="text-xs font-bold min-w-[30px]">{playerTank.health}</span>
                     </div>
                 </div>
 
-                <div className="flex gap-1">
+                <div className="flex gap-1 shrink-0">
                     <Dialog>
                         <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                <List className="h-3 w-3 mr-1" />
-                                Results
+                            <Button variant="outline" size="sm" className="h-8 px-2">
+                                <List className="h-3 w-3 md:mr-1" />
+                                <span className="hidden md:inline">Results</span>
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -873,18 +874,31 @@ export default function TankGame({ onBack }: TankGameProps) {
                     </Dialog>
 
                     {!isPlaying && !isGameOver && (
-                        <Button onClick={startGame} size="sm">
-                            Start Game
+                        <Button onClick={startGame} size="sm" className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white animate-pulse font-bold">
+                            START
                         </Button>
                     )}
 
                     {isPlaying && (
-                        <Button onClick={() => setIsPaused(p => !p)} size="sm" variant="outline">
+                        <Button onClick={() => setIsPaused(p => !p)} size="sm" variant="outline" className="h-8 px-2">
                             {isPaused ? 'Resume' : 'Pause'}
                         </Button>
                     )}
                 </div>
             </div>
+
+            {/* Tap to Start Overlay for Mobile */}
+            {!isPlaying && !isGameOver && (
+                <div
+                    className="absolute inset-0 top-[60px] bottom-[160px] z-10 flex flex-col items-center justify-center cursor-pointer"
+                    onClick={startGame}
+                >
+                    <div className="bg-black/50 p-4 rounded-xl text-white text-center backdrop-blur-sm border border-white/20 animate-bounce">
+                        <p className="text-2xl font-bold mb-1">👆 TAP TO START</p>
+                        <p className="text-xs opacity-80">(or press Start button)</p>
+                    </div>
+                </div>
+            )}
 
             {/* Game Over Modal */}
             {isGameOver && (
