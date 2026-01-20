@@ -873,11 +873,7 @@ export default function TankGame({ onBack }: TankGameProps) {
                         </DialogContent>
                     </Dialog>
 
-                    {!isPlaying && !isGameOver && (
-                        <Button onClick={startGame} size="sm" className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white animate-pulse font-bold">
-                            START
-                        </Button>
-                    )}
+                    {/* Start button removed from header - moved to main screen overlay */}
 
                     {isPlaying && (
                         <Button onClick={() => setIsPaused(p => !p)} size="sm" variant="outline" className="h-8 px-2">
@@ -887,16 +883,16 @@ export default function TankGame({ onBack }: TankGameProps) {
                 </div>
             </div>
 
-            {/* Tap to Start Overlay for Mobile */}
+            {/* Start Game Overlay */}
             {!isPlaying && !isGameOver && (
-                <div
-                    className="absolute inset-0 top-[60px] bottom-[160px] z-10 flex flex-col items-center justify-center cursor-pointer"
-                    onClick={startGame}
-                >
-                    <div className="bg-black/50 p-4 rounded-xl text-white text-center backdrop-blur-sm border border-white/20 animate-bounce">
-                        <p className="text-2xl font-bold mb-1">👆 TAP TO START</p>
-                        <p className="text-xs opacity-80">(or press Start button)</p>
-                    </div>
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                    <Button
+                        onClick={startGame}
+                        size="lg"
+                        className="text-xl font-bold px-8 py-6 bg-green-600 hover:bg-green-700 text-white shadow-lg scale-110 animate-pulse"
+                    >
+                        PLAY TANK BATTLE 🎮
+                    </Button>
                 </div>
             )}
 
