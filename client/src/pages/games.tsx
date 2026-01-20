@@ -14,6 +14,7 @@ import ReactionTimeGame from "../components/reaction-time-game";
 import TicTacToeGame from "../components/tic-tac-toe-game";
 import SudokuGame from "../components/sudoku-game";
 import CheckersGame from "../components/checkers-game";
+import TankGame from "../components/tank-game";
 
 export default function Games() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
@@ -95,6 +96,13 @@ export default function Games() {
       description: "Classic strategy game. Play against a smart AI!",
       icon: "🏁",
       component: CheckersGame,
+    },
+    {
+      id: "tank-battle",
+      title: "Tank Battle",
+      description: "Destroy enemy tanks and survive through levels!",
+      icon: "🎖️",
+      component: TankGame,
     },
   ];
 

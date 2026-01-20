@@ -24,7 +24,7 @@ const DINO_HEIGHT = 65; // Increased from 40 -> 55 -> 65 - birds MUST hit now!
 const GROUND_HEIGHT = 20;
 const GRAVITY = 1.0;
 const JUMP_FORCE = -15; // Increased to -15 for 1.05x height
-const GAME_SPEED = 4;
+const GAME_SPEED = 7; // Başlanğıc sürəti
 
 
 export default function DinoGame({ onBack }: DinoGameProps) {
@@ -41,6 +41,8 @@ export default function DinoGame({ onBack }: DinoGameProps) {
   const dinoYRef = useRef(GAME_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [gameSpeed, setGameSpeed] = useState(GAME_SPEED);
+  const obstaclesPassedRef = useRef(0); // Keçilən engel sayı
+  const lastSpeedIncreaseRef = useRef(0); // Son sürət artımındakı engel sayı
   const [playerName, setPlayerName] = useState("");
   const [showScoreSubmit, setShowScoreSubmit] = useState(false);
   const [isNewRecord, setIsNewRecord] = useState(false);
@@ -147,9 +149,7 @@ export default function DinoGame({ onBack }: DinoGameProps) {
       dinoLegTickRef.current = 0;
       setDinoLegState(prev => (prev === 0 ? 1 : 0));
     }
-
-    // Increase game speed gradually
-    setGameSpeed(prev => Math.min(prev + 0.001, 8));
+    // Sürət artırma - hər 5 engeldə bir 0.3 artır (maksimum 8)
 
     // Update parallax background
     setCloudOffset(prev => (prev + gameSpeed * 0.2) % GAME_WIDTH);
@@ -178,9 +178,27 @@ export default function DinoGame({ onBack }: DinoGameProps) {
 
     // Update obstacles
     setObstacles(prev => {
+      const beforeCount = prev.length;
       const updated = prev
         .map(obstacle => ({ ...obstacle, x: obstacle.x - gameSpeed }))
         .filter(obstacle => obstacle.x + obstacle.width > 0);
+
+      // Keçilən engelləri say (ekrandan çıxanlar)
+      const passedCount = beforeCount - updated.length + (prev.filter(o => o.x > 0 && o.x - gameSpeed <= 0).length);
+
+      // Dinonun solundan keçən engelləri say
+      prev.forEach(obstacle => {
+        const dinoRight = 50 + DINO_WIDTH;
+        if (obstacle.x > dinoRight && obstacle.x - gameSpeed <= dinoRight) {
+          obstaclesPassedRef.current++;
+
+          // Hər 5 engeldə sürəti artır
+          if (obstaclesPassedRef.current - lastSpeedIncreaseRef.current >= 5) {
+            lastSpeedIncreaseRef.current = obstaclesPassedRef.current;
+            setGameSpeed(prevSpeed => Math.min(prevSpeed + 0.35, 8)); // 0.35 artım, max 8
+          }
+        }
+      });
 
 
 
@@ -308,6 +326,8 @@ export default function DinoGame({ onBack }: DinoGameProps) {
     setIsDucking(false);
     setObstacles([]);
     setGameSpeed(GAME_SPEED);
+    obstaclesPassedRef.current = 0;
+    lastSpeedIncreaseRef.current = 0;
     setIsGameOver(false);
     setIsPlaying(true);
     setShowScoreSubmit(false);
@@ -327,6 +347,8 @@ export default function DinoGame({ onBack }: DinoGameProps) {
     setIsDucking(false);
     setObstacles([]);
     setGameSpeed(GAME_SPEED);
+    obstaclesPassedRef.current = 0;
+    lastSpeedIncreaseRef.current = 0;
     setIsGameOver(false);
     setIsPlaying(false);
     setShowScoreSubmit(false);

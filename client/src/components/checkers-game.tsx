@@ -186,7 +186,7 @@ export default function CheckersGame({ onBack }: CheckersGameProps) {
                         <div className="flex flex-col items-center">
                             <span className="text-2xl font-bold font-mono">VS</span>
                             <div className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                                {gameOver ? "Ended" : (turn === userTeam ? "Your Turn" : "AI Thinking...")}
+                                {gameOver ? "Ended" : (turn === userTeam ? "You" : "AI")}
                             </div>
                         </div>
 
