@@ -15,6 +15,8 @@ import TicTacToeGame from "../components/tic-tac-toe-game";
 import SudokuGame from "../components/sudoku-game";
 import CheckersGame from "../components/checkers-game";
 import TankGame from "../components/tank-game";
+import Game2048 from "../components/game-2048";
+import NonogramGame from "../components/nonogram-game";
 
 export default function Games() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
@@ -103,6 +105,20 @@ export default function Games() {
       description: "Destroy enemy tanks and survive through levels!",
       icon: "🎖️",
       component: TankGame,
+    },
+    {
+      id: "2048-game",
+      title: "2048",
+      description: "Join the numbers and get to the 2048 tile!",
+      icon: "🎲",
+      component: Game2048,
+    },
+    {
+      id: "nonogram-game",
+      title: "Nonogram",
+      description: "Logic puzzle: fill cells by numbers!",
+      icon: "⬛",
+      component: NonogramGame,
     },
   ];
 

@@ -6,1035 +6,1340 @@ import { Input } from '@/components/ui/input';
 import { Trophy, User, List, RotateCcw } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+// ============================================================================
+// TYPES & INTERFACES
+// ============================================================================
+
 interface TankGameProps {
-    onBack: () => void;
+  onBack: () => void;
 }
 
-interface Position {
-    x: number;
-    y: number;
+interface Vector2D {
+  x: number;
+  y: number;
 }
 
 interface Tank {
-    x: number;
-    y: number;
-    rotation: number; // degrees
-    health: number;
-    isPlayer: boolean;
-    lastShot: number;
-    color: string;
+  x: number;
+  y: number;
+  rotation: number; // Body rotation (degrees)
+  turretRotation: number; // Turret rotation (degrees)
+  health: number;
+  maxHealth: number;
+  isPlayer: boolean;
+  lastShot: number;
+  color: string;
+  speed: number;
+  vx: number;
+  vy: number;
+  // AI specific
+  targetX?: number;
+  targetY?: number;
+  aiState?: 'patrol' | 'chase' | 'attack' | 'flee' | 'flank';
+  stuckCounter?: number;
+  lastX?: number;
+  lastY?: number;
 }
 
 interface Bullet {
-    x: number;
-    y: number;
-    rotation: number;
-    isPlayer: boolean;
-    speed: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  isPlayer: boolean;
+  speed: number;
+  damage: number;
 }
 
 interface Obstacle {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    type: 'rock' | 'wall' | 'bush';
-    destructible: boolean;
-    health: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: 'rock' | 'wall' | 'bush';
+  destructible: boolean;
+  health: number;
 }
 
 interface Explosion {
-    x: number;
-    y: number;
-    frame: number;
-    maxFrames: number;
+  x: number;
+  y: number;
+  frame: number;
+  maxFrames: number;
+  size: number;
 }
 
 interface PowerUp {
-    x: number;
-    y: number;
-    type: 'health' | 'speed' | 'shield';
-    id: number;
+  x: number;
+  y: number;
+  type: 'health' | 'speed' | 'damage';
+  id: number;
 }
 
-// Game constants
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 500;
 const TANK_SIZE = 40;
-const BULLET_SIZE = 8;
-const TANK_SPEED = 3;
-const BULLET_SPEED = 7;
-const PLAYER_SHOOT_COOLDOWN = 300;
-const ENEMY_SHOOT_COOLDOWN = 1500;
-const ROTATION_SPEED = 4;
-const PLAYER_MAX_HEALTH = 50;
+const TANK_COLLISION_RADIUS = 18;
+const BULLET_SIZE = 6;
+const BULLET_SPEED = 10;
+const PLAYER_SPEED = 3.5;
+const PLAYER_SHOOT_COOLDOWN = 250;
+const ENEMY_SHOOT_COOLDOWN = 1200;
+const PLAYER_MAX_HEALTH = 100;
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function distance(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+function normalizeAngle(angle: number): number {
+  while (angle > 180) angle -= 360;
+  while (angle < -180) angle += 360;
+  return angle;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  let diff = normalizeAngle(b - a);
+  return a + diff * t;
+}
+
+// ============================================================================
+// COLLISION DETECTION
+// ============================================================================
+
+function checkRectCollision(
+  x1: number, y1: number, w1: number, h1: number,
+  x2: number, y2: number, w2: number, h2: number
+): boolean {
+  return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+}
+
+function checkCircleRectCollision(
+  cx: number, cy: number, radius: number,
+  rx: number, ry: number, rw: number, rh: number
+): boolean {
+  const closestX = clamp(cx, rx, rx + rw);
+  const closestY = clamp(cy, ry, ry + rh);
+  const distX = cx - closestX;
+  const distY = cy - closestY;
+  return (distX * distX + distY * distY) < (radius * radius);
+}
+
+function isPositionBlocked(
+  x: number, y: number, radius: number,
+  obstacles: Obstacle[], tanks: Tank[], excludeTank?: Tank
+): boolean {
+  // Check canvas bounds
+  if (x - radius < 0 || x + radius > CANVAS_WIDTH || 
+      y - radius < 0 || y + radius > CANVAS_HEIGHT) {
+    return true;
+  }
+  
+  // Check obstacles
+  for (const obs of obstacles) {
+    if (obs.type !== 'bush' && 
+        checkCircleRectCollision(x, y, radius, obs.x, obs.y, obs.width, obs.height)) {
+      return true;
+    }
+  }
+  
+  // Check other tanks
+  for (const tank of tanks) {
+    if (tank === excludeTank) continue;
+    if (distance(x, y, tank.x + TANK_SIZE / 2, tank.y + TANK_SIZE / 2) < radius + TANK_COLLISION_RADIUS) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+function hasLineOfSight(
+  x1: number, y1: number, x2: number, y2: number,
+  obstacles: Obstacle[]
+): boolean {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const steps = Math.ceil(dist / 15);
+  
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const checkX = x1 + dx * t;
+    const checkY = y1 + dy * t;
+    
+    for (const obs of obstacles) {
+      if (obs.type !== 'bush' &&
+          checkX > obs.x && checkX < obs.x + obs.width &&
+          checkY > obs.y && checkY < obs.y + obs.height) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// ============================================================================
+// LEVEL GENERATION
+// ============================================================================
+
+function generateObstacles(level: number): Obstacle[] {
+  const obs: Obstacle[] = [];
+  
+  // Border walls
+  obs.push({ x: 80, y: 20, width: 150, height: 12, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH - 230, y: 20, width: 150, height: 12, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: 80, y: CANVAS_HEIGHT - 32, width: 120, height: 12, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH - 200, y: CANVAS_HEIGHT - 32, width: 120, height: 12, type: 'wall', destructible: false, health: 999 });
+  
+  // Side walls
+  obs.push({ x: 60, y: 80, width: 12, height: 100, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: 60, y: 280, width: 12, height: 100, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH - 72, y: 80, width: 12, height: 100, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH - 72, y: 280, width: 12, height: 100, type: 'wall', destructible: false, health: 999 });
+  
+  // Center strategic cover
+  obs.push({ x: CANVAS_WIDTH / 2 - 50, y: CANVAS_HEIGHT / 2 - 40, width: 100, height: 12, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH / 2 - 50, y: CANVAS_HEIGHT / 2 + 28, width: 100, height: 12, type: 'wall', destructible: false, health: 999 });
+  obs.push({ x: CANVAS_WIDTH / 2 - 6, y: CANVAS_HEIGHT / 2 - 40, width: 12, height: 80, type: 'wall', destructible: false, health: 999 });
+  
+  // Random obstacles based on level
+  const randomCount = Math.min(4 + level * 2, 15);
+  for (let i = 0; i < randomCount; i++) {
+    const type = Math.random() < 0.3 ? 'rock' : (Math.random() < 0.5 ? 'wall' : 'bush');
+    const width = type === 'wall' ? 50 + Math.random() * 40 : 35;
+    const height = type === 'wall' ? 12 : 35;
+    
+    // Find valid position
+    let attempts = 0;
+    let x: number = 0;
+    let y: number = 0;
+    do {
+      x = 100 + Math.random() * (CANVAS_WIDTH - 200);
+      y = 60 + Math.random() * (CANVAS_HEIGHT - 160);
+      attempts++;
+    } while (attempts < 20 && obs.some(o => 
+      checkRectCollision(x, y, width, height, o.x - 20, o.y - 20, o.width + 40, o.height + 40)
+    ));
+    
+    if (attempts < 20) {
+      obs.push({
+        x, y, width, height, type,
+        destructible: type === 'wall',
+        health: type === 'wall' ? 3 + level : 1
+      });
+    }
+  }
+  
+  return obs;
+}
+
+function generateEnemies(level: number): Tank[] {
+  const count = Math.min(2 + Math.floor(level * 0.8), 6);
+  const enemies: Tank[] = [];
+  
+  for (let i = 0; i < count; i++) {
+    const health = 1 + Math.floor(level / 2);
+    enemies.push({
+      x: 100 + Math.random() * (CANVAS_WIDTH - 200),
+      y: 40 + Math.random() * 120,
+      rotation: 90 + (Math.random() - 0.5) * 60,
+      turretRotation: 90,
+      health,
+      maxHealth: health,
+      isPlayer: false,
+      lastShot: 0,
+      color: level >= 3 ? '#dc2626' : '#65a30d',
+      speed: 1.5 + level * 0.2,
+      vx: 0,
+      vy: 0,
+      aiState: 'patrol',
+      stuckCounter: 0,
+      lastX: 0,
+      lastY: 0
+    });
+  }
+  
+  return enemies;
+}
+
+function generatePowerups(level: number): PowerUp[] {
+  const count = 2 + Math.floor(level / 2);
+  const powerups: PowerUp[] = [];
+  const types: ('health' | 'speed' | 'damage')[] = ['health', 'health', 'speed', 'damage'];
+  
+  for (let i = 0; i < count; i++) {
+    powerups.push({
+      x: 80 + Math.random() * (CANVAS_WIDTH - 160),
+      y: 80 + Math.random() * (CANVAS_HEIGHT - 200),
+      type: types[Math.floor(Math.random() * types.length)],
+      id: Date.now() + i
+    });
+  }
+  
+  return powerups;
+}
+
+// ============================================================================
+// AI SYSTEM
+// ============================================================================
+
+function updateEnemyAI(
+  enemy: Tank,
+  player: Tank,
+  allTanks: Tank[],
+  obstacles: Obstacle[],
+  deltaTime: number
+): { tank: Tank; bullet: Bullet | null } {
+  const e = { ...enemy };
+  const now = Date.now();
+  
+  const playerCenterX = player.x + TANK_SIZE / 2;
+  const playerCenterY = player.y + TANK_SIZE / 2;
+  const enemyCenterX = e.x + TANK_SIZE / 2;
+  const enemyCenterY = e.y + TANK_SIZE / 2;
+  
+  const dx = playerCenterX - enemyCenterX;
+  const dy = playerCenterY - enemyCenterY;
+  const distToPlayer = Math.sqrt(dx * dx + dy * dy);
+  const angleToPlayer = Math.atan2(dy, dx) * 180 / Math.PI;
+  
+  const canSeePlayer = hasLineOfSight(enemyCenterX, enemyCenterY, playerCenterX, playerCenterY, obstacles);
+  
+  // Detect if stuck
+  if (e.lastX !== undefined && e.lastY !== undefined) {
+    const moved = distance(e.x, e.y, e.lastX, e.lastY);
+    if (moved < 0.5) {
+      e.stuckCounter = (e.stuckCounter || 0) + 1;
+    } else {
+      e.stuckCounter = 0;
+    }
+  }
+  e.lastX = e.x;
+  e.lastY = e.y;
+  
+  // State machine for AI behavior
+  const isStuck = (e.stuckCounter || 0) > 30;
+  
+  if (canSeePlayer && distToPlayer < 300) {
+    e.aiState = 'attack';
+  } else if (canSeePlayer && distToPlayer < 500) {
+    e.aiState = 'chase';
+  } else if (isStuck) {
+    e.aiState = 'flank';
+  } else if (!canSeePlayer) {
+    e.aiState = 'patrol';
+  }
+  
+  // Turret always aims at player if visible
+  if (canSeePlayer) {
+    e.turretRotation = lerpAngle(e.turretRotation, angleToPlayer, 0.15);
+  }
+  
+  // Movement based on state
+  let targetAngle = e.rotation;
+  let moveForward = false;
+  let moveBackward = false;
+  
+  switch (e.aiState) {
+    case 'attack':
+      // Strafe while attacking
+      if (distToPlayer < 150) {
+        // Too close, back up
+        targetAngle = angleToPlayer + 180;
+        moveForward = true;
+      } else {
+        // Circle strafe
+        const strafeAngle = angleToPlayer + 90 + Math.sin(now / 500) * 45;
+        targetAngle = strafeAngle;
+        moveForward = true;
+      }
+      break;
+      
+    case 'chase':
+      // Move toward player
+      targetAngle = angleToPlayer;
+      moveForward = true;
+      break;
+      
+    case 'flank':
+      // Try to go around obstacle
+      const flankAngle = angleToPlayer + (Math.random() > 0.5 ? 90 : -90);
+      targetAngle = flankAngle;
+      moveForward = true;
+      e.stuckCounter = 0;
+      break;
+      
+    case 'patrol':
+    default:
+      // Move toward player's general area
+      if (!e.targetX || !e.targetY || distance(enemyCenterX, enemyCenterY, e.targetX, e.targetY) < 50) {
+        // Set new patrol target
+        e.targetX = playerCenterX + (Math.random() - 0.5) * 200;
+        e.targetY = playerCenterY + (Math.random() - 0.5) * 200;
+        e.targetX = clamp(e.targetX, 80, CANVAS_WIDTH - 80);
+        e.targetY = clamp(e.targetY, 80, CANVAS_HEIGHT - 80);
+      }
+      targetAngle = Math.atan2(e.targetY - enemyCenterY, e.targetX - enemyCenterX) * 180 / Math.PI;
+      moveForward = true;
+      break;
+  }
+  
+  // Smoothly rotate body
+  e.rotation = lerpAngle(e.rotation, targetAngle, 0.08);
+  
+  // Movement
+  if (moveForward || moveBackward) {
+    const rad = e.rotation * Math.PI / 180;
+    const moveSpeed = e.speed * (moveBackward ? -0.6 : 1);
+    const newX = e.x + Math.cos(rad) * moveSpeed;
+    const newY = e.y + Math.sin(rad) * moveSpeed;
+    
+    if (!isPositionBlocked(newX + TANK_SIZE / 2, newY + TANK_SIZE / 2, TANK_COLLISION_RADIUS, obstacles, allTanks, e)) {
+      e.x = newX;
+      e.y = newY;
+    } else {
+      // Try sliding along walls
+      const slideX = e.x + Math.cos(rad) * moveSpeed;
+      if (!isPositionBlocked(slideX + TANK_SIZE / 2, e.y + TANK_SIZE / 2, TANK_COLLISION_RADIUS, obstacles, allTanks, e)) {
+        e.x = slideX;
+      } else {
+        const slideY = e.y + Math.sin(rad) * moveSpeed;
+        if (!isPositionBlocked(e.x + TANK_SIZE / 2, slideY + TANK_SIZE / 2, TANK_COLLISION_RADIUS, obstacles, allTanks, e)) {
+          e.y = slideY;
+        }
+      }
+    }
+  }
+  
+  // Shooting
+  let bullet: Bullet | null = null;
+  if (canSeePlayer && now - e.lastShot > ENEMY_SHOOT_COOLDOWN) {
+    const turretDiff = Math.abs(normalizeAngle(e.turretRotation - angleToPlayer));
+    if (turretDiff < 15) {
+      const rad = e.turretRotation * Math.PI / 180;
+      bullet = {
+        x: enemyCenterX + Math.cos(rad) * (TANK_SIZE / 2 + 5),
+        y: enemyCenterY + Math.sin(rad) * (TANK_SIZE / 2 + 5),
+        vx: Math.cos(rad) * BULLET_SPEED,
+        vy: Math.sin(rad) * BULLET_SPEED,
+        rotation: e.turretRotation,
+        isPlayer: false,
+        speed: BULLET_SPEED,
+        damage: 15
+      };
+      e.lastShot = now;
+    }
+  }
+  
+  return { tank: e, bullet };
+}
+
+// ============================================================================
+// RENDERING
+// ============================================================================
+
+function drawGame(
+  ctx: CanvasRenderingContext2D,
+  player: Tank,
+  enemies: Tank[],
+  bullets: Bullet[],
+  obstacles: Obstacle[],
+  powerups: PowerUp[],
+  explosions: Explosion[],
+  mousePos: { x: number; y: number },
+  level: number
+) {
+  // Clear and draw background
+  ctx.fillStyle = '#4a5568';
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  
+  // Grass pattern
+  ctx.fillStyle = '#48BB78';
+  for (let x = 0; x < CANVAS_WIDTH; x += 30) {
+    for (let y = 0; y < CANVAS_HEIGHT; y += 30) {
+      if ((Math.floor(x / 30) + Math.floor(y / 30)) % 2 === 0) {
+        ctx.fillRect(x, y, 30, 30);
+      }
+    }
+  }
+  
+  // Draw obstacles
+  for (const obs of obstacles) {
+    if (obs.type === 'rock') {
+      ctx.fillStyle = '#6B7280';
+      ctx.beginPath();
+      ctx.arc(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#4B5563';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (obs.type === 'wall') {
+      // Brick pattern
+      ctx.fillStyle = '#92400E';
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+      
+      // Brick lines
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 1;
+      for (let bx = obs.x; bx < obs.x + obs.width; bx += 15) {
+        ctx.beginPath();
+        ctx.moveTo(bx, obs.y);
+        ctx.lineTo(bx, obs.y + obs.height);
+        ctx.stroke();
+      }
+    } else { // bush
+      ctx.fillStyle = '#22C55E';
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.arc(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  
+  // Draw powerups
+  for (const pup of powerups) {
+    ctx.save();
+    const glow = pup.type === 'health' ? '#10B981' : pup.type === 'speed' ? '#3B82F6' : '#F59E0B';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = glow;
+    
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(pup.x, pup.y, 15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(pup.x, pup.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = glow;
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pup.type === 'health' ? '+' : pup.type === 'speed' ? '⚡' : '💥', pup.x, pup.y);
+    ctx.restore();
+  }
+  
+  // Draw tanks
+  const drawTank = (tank: Tank) => {
+    ctx.save();
+    const cx = tank.x + TANK_SIZE / 2;
+    const cy = tank.y + TANK_SIZE / 2;
+    
+    // Tank body
+    ctx.translate(cx, cy);
+    ctx.rotate(tank.rotation * Math.PI / 180);
+    
+    // Tracks
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(-TANK_SIZE / 2, -TANK_SIZE / 2 + 2, TANK_SIZE, 8);
+    ctx.fillRect(-TANK_SIZE / 2, TANK_SIZE / 2 - 10, TANK_SIZE, 8);
+    
+    // Body
+    ctx.fillStyle = tank.color;
+    ctx.fillRect(-TANK_SIZE / 2 + 3, -TANK_SIZE / 2.5, TANK_SIZE - 6, TANK_SIZE / 1.25);
+    
+    ctx.restore();
+    
+    // Turret (separate rotation)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(tank.turretRotation * Math.PI / 180);
+    
+    // Turret base
+    ctx.fillStyle = tank.isPlayer ? '#2563EB' : (tank.color === '#dc2626' ? '#B91C1C' : '#4D7C0F');
+    ctx.beginPath();
+    ctx.arc(0, 0, TANK_SIZE / 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Barrel
+    ctx.fillStyle = '#1F2937';
+    ctx.fillRect(0, -3, TANK_SIZE / 2 + 8, 6);
+    
+    ctx.restore();
+    
+    // Health bar
+    if (tank.health > 0) {
+      const healthPercent = tank.health / tank.maxHealth;
+      const barWidth = TANK_SIZE;
+      ctx.fillStyle = '#374151';
+      ctx.fillRect(tank.x, tank.y - 12, barWidth, 5);
+      ctx.fillStyle = healthPercent > 0.6 ? '#22C55E' : healthPercent > 0.3 ? '#EAB308' : '#EF4444';
+      ctx.fillRect(tank.x, tank.y - 12, barWidth * healthPercent, 5);
+    }
+  };
+  
+  // Draw player tank
+  if (player.health > 0) {
+    drawTank(player);
+  }
+  
+  // Draw enemies
+  for (const enemy of enemies) {
+    drawTank(enemy);
+  }
+  
+  // Draw bullets
+  for (const bullet of bullets) {
+    ctx.save();
+    ctx.translate(bullet.x, bullet.y);
+    ctx.rotate(bullet.rotation * Math.PI / 180);
+    
+    // Bullet trail
+    ctx.fillStyle = bullet.isPlayer ? 'rgba(59, 130, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+    ctx.fillRect(-20, -2, 20, 4);
+    
+    // Bullet
+    ctx.fillStyle = bullet.isPlayer ? '#FBBF24' : '#EF4444';
+    ctx.beginPath();
+    ctx.arc(0, 0, BULLET_SIZE / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  
+  // Draw explosions
+  for (const exp of explosions) {
+    const progress = exp.frame / exp.maxFrames;
+    const radius = exp.size * (0.5 + progress * 0.5);
+    const alpha = 1 - progress;
+    
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#F97316';
+    ctx.beginPath();
+    ctx.arc(exp.x, exp.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#FBBF24';
+    ctx.beginPath();
+    ctx.arc(exp.x, exp.y, radius * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  
+  // Draw crosshair
+  ctx.strokeStyle = '#EF4444';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(mousePos.x, mousePos.y, 15, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(mousePos.x - 20, mousePos.y);
+  ctx.lineTo(mousePos.x - 8, mousePos.y);
+  ctx.moveTo(mousePos.x + 8, mousePos.y);
+  ctx.lineTo(mousePos.x + 20, mousePos.y);
+  ctx.moveTo(mousePos.x, mousePos.y - 20);
+  ctx.lineTo(mousePos.x, mousePos.y - 8);
+  ctx.moveTo(mousePos.x, mousePos.y + 8);
+  ctx.lineTo(mousePos.x, mousePos.y + 20);
+  ctx.stroke();
+  
+  // Draw dot in center
+  ctx.fillStyle = '#EF4444';
+  ctx.beginPath();
+  ctx.arc(mousePos.x, mousePos.y, 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
 export default function TankGame({ onBack }: TankGameProps) {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isGameOver, setIsGameOver] = useState(false);
-    const [isPaused, setIsPaused] = useState(false);
-    const [score, setScore] = useState(0);
-    const [level, setLevel] = useState(1);
-    const [playerTank, setPlayerTank] = useState<Tank>({
-        x: CANVAS_WIDTH / 2 - TANK_SIZE / 2,
-        y: CANVAS_HEIGHT - 80,
-        rotation: -90, // Yuxarıya baxır
-        health: PLAYER_MAX_HEALTH,
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
+  
+  const [playerTank, setPlayerTank] = useState<Tank>({
+    x: CANVAS_WIDTH / 2 - TANK_SIZE / 2,
+    y: CANVAS_HEIGHT - 80,
+    rotation: -90,
+    turretRotation: -90,
+    health: PLAYER_MAX_HEALTH,
+    maxHealth: PLAYER_MAX_HEALTH,
+    isPlayer: true,
+    lastShot: 0,
+    color: '#3b82f6',
+    speed: PLAYER_SPEED,
+    vx: 0,
+    vy: 0
+  });
+  
+  const [enemies, setEnemies] = useState<Tank[]>([]);
+  const [bullets, setBullets] = useState<Bullet[]>([]);
+  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [explosions, setExplosions] = useState<Explosion[]>([]);
+  const [powerups, setPowerups] = useState<PowerUp[]>([]);
+  const [playerName, setPlayerName] = useState("");
+  const [showScoreSubmit, setShowScoreSubmit] = useState(false);
+  
+  // Refs for game loop
+  const keysPressed = useRef<Set<string>>(new Set());
+  const mousePos = useRef<{ x: number; y: number }>({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 });
+  const mouseDown = useRef<boolean>(false);
+  const gameLoopRef = useRef<number>();
+  const lastTimeRef = useRef<number>(0);
+  
+  const playerRef = useRef(playerTank);
+  const enemiesRef = useRef(enemies);
+  const bulletsRef = useRef(bullets);
+  const obstaclesRef = useRef(obstacles);
+  
+  const queryClient = useQueryClient();
+  
+  // Queries
+  const { data: topScores = [] } = useQuery({
+    queryKey: ['/api/games/tank/scores'],
+    queryFn: async () => {
+      const response = await fetch('/api/games/tank/scores?limit=5');
+      if (!response.ok) throw new Error('Failed to fetch scores');
+      return response.json();
+    }
+  });
+  
+  const { data: allScores = [] } = useQuery({
+    queryKey: ['/api/games/tank/all-scores'],
+    queryFn: async () => {
+      const response = await fetch('/api/games/tank/scores');
+      if (!response.ok) throw new Error('Failed to fetch all scores');
+      return response.json();
+    }
+  });
+  
+  const submitScoreMutation = useMutation({
+    mutationFn: async (scoreData: { playerName: string; score: number }) => {
+      const response = await fetch('/api/games/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...scoreData, gameType: 'tank' }),
+      });
+      if (!response.ok) throw new Error('Failed to submit score');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/games/tank/scores'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/games/tank/all-scores'] });
+      setShowScoreSubmit(false);
+    }
+  });
+  
+  // Sync refs
+  useEffect(() => { playerRef.current = playerTank; }, [playerTank]);
+  useEffect(() => { enemiesRef.current = enemies; }, [enemies]);
+  useEffect(() => { bulletsRef.current = bullets; }, [bullets]);
+  useEffect(() => { obstaclesRef.current = obstacles; }, [obstacles]);
+  
+  // Add explosion effect
+  const addExplosion = useCallback((x: number, y: number, size: number = 25) => {
+    setExplosions(prev => [...prev, { x, y, frame: 0, maxFrames: 20, size }]);
+  }, []);
+  
+  // Game loop
+  const gameLoop = useCallback((timestamp: number) => {
+    if (!isPlaying || isGameOver || isPaused) return;
+    
+    const deltaTime = timestamp - lastTimeRef.current;
+    if (deltaTime < 16) {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+      return;
+    }
+    lastTimeRef.current = timestamp;
+    
+    const now = Date.now();
+    const player = playerRef.current;
+    const currentEnemies = enemiesRef.current;
+    const currentObstacles = obstaclesRef.current;
+    
+    // Player turret follows mouse
+    const playerCenterX = player.x + TANK_SIZE / 2;
+    const playerCenterY = player.y + TANK_SIZE / 2;
+    const angleToMouse = Math.atan2(
+      mousePos.current.y - playerCenterY,
+      mousePos.current.x - playerCenterX
+    ) * 180 / Math.PI;
+    
+    // WASD Movement
+    let moveX = 0;
+    let moveY = 0;
+    
+    if (keysPressed.current.has('KeyW') || keysPressed.current.has('ArrowUp')) {
+      moveY -= 1;
+    }
+    if (keysPressed.current.has('KeyS') || keysPressed.current.has('ArrowDown')) {
+      moveY += 1;
+    }
+    if (keysPressed.current.has('KeyA') || keysPressed.current.has('ArrowLeft')) {
+      moveX -= 1;
+    }
+    if (keysPressed.current.has('KeyD') || keysPressed.current.has('ArrowRight')) {
+      moveX += 1;
+    }
+    
+    // Normalize diagonal movement
+    if (moveX !== 0 || moveY !== 0) {
+      const len = Math.sqrt(moveX * moveX + moveY * moveY);
+      moveX /= len;
+      moveY /= len;
+    }
+    
+    // Calculate new position
+    let newPlayerX = player.x + moveX * player.speed;
+    let newPlayerY = player.y + moveY * player.speed;
+    
+    // Update body rotation based on movement direction
+    let newBodyRotation = player.rotation;
+    if (moveX !== 0 || moveY !== 0) {
+      newBodyRotation = Math.atan2(moveY, moveX) * 180 / Math.PI;
+    }
+    
+    // Check collision
+    if (isPositionBlocked(
+      newPlayerX + TANK_SIZE / 2,
+      newPlayerY + TANK_SIZE / 2,
+      TANK_COLLISION_RADIUS,
+      currentObstacles,
+      currentEnemies,
+      player
+    )) {
+      // Try sliding along X or Y
+      if (!isPositionBlocked(newPlayerX + TANK_SIZE / 2, player.y + TANK_SIZE / 2, TANK_COLLISION_RADIUS, currentObstacles, currentEnemies, player)) {
+        newPlayerY = player.y;
+      } else if (!isPositionBlocked(player.x + TANK_SIZE / 2, newPlayerY + TANK_SIZE / 2, TANK_COLLISION_RADIUS, currentObstacles, currentEnemies, player)) {
+        newPlayerX = player.x;
+      } else {
+        newPlayerX = player.x;
+        newPlayerY = player.y;
+      }
+    }
+    
+    // Player shooting (mouse click or space)
+    if ((mouseDown.current || keysPressed.current.has('Space')) && now - player.lastShot > PLAYER_SHOOT_COOLDOWN) {
+      const rad = angleToMouse * Math.PI / 180;
+      const bullet: Bullet = {
+        x: playerCenterX + Math.cos(rad) * (TANK_SIZE / 2 + 5),
+        y: playerCenterY + Math.sin(rad) * (TANK_SIZE / 2 + 5),
+        vx: Math.cos(rad) * BULLET_SPEED,
+        vy: Math.sin(rad) * BULLET_SPEED,
+        rotation: angleToMouse,
         isPlayer: true,
-        lastShot: 0,
-        color: '#3b82f6'
+        speed: BULLET_SPEED,
+        damage: 25
+      };
+      setBullets(prev => [...prev, bullet]);
+      setPlayerTank(prev => ({ ...prev, lastShot: now }));
+    }
+    
+    setPlayerTank(prev => ({
+      ...prev,
+      x: newPlayerX,
+      y: newPlayerY,
+      rotation: lerpAngle(prev.rotation, newBodyRotation, 0.15),
+      turretRotation: angleToMouse
+    }));
+    
+    // Update enemies with improved AI
+    const newBullets: Bullet[] = [];
+    setEnemies(prevEnemies => {
+      const allTanks = [playerRef.current, ...prevEnemies];
+      return prevEnemies.map(enemy => {
+        const result = updateEnemyAI(enemy, playerRef.current, allTanks, currentObstacles, deltaTime);
+        if (result.bullet) {
+          newBullets.push(result.bullet);
+        }
+        return result.tank;
+      });
     });
-    const [enemies, setEnemies] = useState<Tank[]>([]);
-    const [bullets, setBullets] = useState<Bullet[]>([]);
-    const [obstacles, setObstacles] = useState<Obstacle[]>([]);
-    const [explosions, setExplosions] = useState<Explosion[]>([]);
-    const [powerups, setPowerups] = useState<PowerUp[]>([]);
-    const [playerName, setPlayerName] = useState("");
-    const [showScoreSubmit, setShowScoreSubmit] = useState(false);
-    const [isNewRecord, setIsNewRecord] = useState(false);
-
-    // Refs for game loop
-    const keysPressed = useRef<Set<string>>(new Set());
-    const gameLoopRef = useRef<number>();
-    const lastTimeRef = useRef<number>(0);
-    const playerRef = useRef(playerTank);
-    const enemiesRef = useRef(enemies);
-    const bulletsRef = useRef(bullets);
-    const obstaclesRef = useRef(obstacles);
-
-    const queryClient = useQueryClient();
-
-    // Fetch top scores
-    const { data: topScores = [] } = useQuery({
-        queryKey: ['/api/games/tank/scores'],
-        queryFn: async () => {
-            const response = await fetch('/api/games/tank/scores?limit=5');
-            if (!response.ok) throw new Error('Failed to fetch scores');
-            return response.json();
+    
+    if (newBullets.length > 0) {
+      setBullets(prev => [...prev, ...newBullets]);
+    }
+    
+    // Update bullets
+    setBullets(prevBullets => {
+      const activeBullets: Bullet[] = [];
+      
+      for (const bullet of prevBullets) {
+        const newX = bullet.x + bullet.vx;
+        const newY = bullet.y + bullet.vy;
+        
+        // Check bounds
+        if (newX < 0 || newX > CANVAS_WIDTH || newY < 0 || newY > CANVAS_HEIGHT) continue;
+        
+        // Check obstacle collision
+        let hitObstacle = false;
+        let hitObstacleIndex = -1;
+        
+        for (let i = 0; i < currentObstacles.length; i++) {
+          const obs = currentObstacles[i];
+          if (obs.type !== 'bush' && checkCircleRectCollision(newX, newY, BULLET_SIZE / 2, obs.x, obs.y, obs.width, obs.height)) {
+            hitObstacle = true;
+            hitObstacleIndex = i;
+            addExplosion(newX, newY, 15);
+            break;
+          }
         }
-    });
-
-    // Fetch all scores
-    const { data: allScores = [] } = useQuery({
-        queryKey: ['/api/games/tank/all-scores'],
-        queryFn: async () => {
-            const response = await fetch('/api/games/tank/scores');
-            if (!response.ok) throw new Error('Failed to fetch all scores');
-            return response.json();
+        
+        if (hitObstacle) {
+          if (hitObstacleIndex >= 0) {
+            setObstacles(prevObs => prevObs.map((obs, idx) => {
+              if (idx === hitObstacleIndex && obs.destructible) {
+                const newHealth = obs.health - 1;
+                if (newHealth <= 0) return null as any;
+                return { ...obs, health: newHealth };
+              }
+              return obs;
+            }).filter(Boolean));
+          }
+          continue;
         }
-    });
-
-    // Submit score mutation
-    const submitScoreMutation = useMutation({
-        mutationFn: async (scoreData: { playerName: string; score: number }) => {
-            const response = await fetch('/api/games/scores', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...scoreData, gameType: 'tank' }),
-            });
-            if (!response.ok) throw new Error('Failed to submit score');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['/api/games/tank/scores'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/games/tank/all-scores'] });
-            setShowScoreSubmit(false);
-        }
-    });
-
-    // Sync refs
-    useEffect(() => { playerRef.current = playerTank; }, [playerTank]);
-    useEffect(() => { enemiesRef.current = enemies; }, [enemies]);
-    useEffect(() => { bulletsRef.current = bullets; }, [bullets]);
-    useEffect(() => { obstaclesRef.current = obstacles; }, [obstacles]);
-
-    // Generate obstacles for level
-    const generateObstacles = useCallback((lvl: number): Obstacle[] => {
-        const obs: Obstacle[] = [];
-
-        // Kənar divarları (barrier)
-        // Yuxarı kənar divarları
-        obs.push({ x: 100, y: 30, width: 150, height: 15, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: 550, y: 30, width: 150, height: 15, type: 'wall', destructible: false, health: 999 });
-
-        // Aşağı kənar divarları (oyunçu sahəsini qoruyur)
-        obs.push({ x: 100, y: CANVAS_HEIGHT - 45, width: 120, height: 15, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: 580, y: CANVAS_HEIGHT - 45, width: 120, height: 15, type: 'wall', destructible: false, health: 999 });
-
-        // Sol və sağ kənar divarları - ortaya doğru
-        obs.push({ x: 80, y: 100, width: 15, height: 120, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: 80, y: 280, width: 15, height: 120, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: CANVAS_WIDTH - 95, y: 100, width: 15, height: 120, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: CANVAS_WIDTH - 95, y: 280, width: 15, height: 120, type: 'wall', destructible: false, health: 999 });
-
-        // Ortada strateji divarlar - sınmaz
-        obs.push({ x: CANVAS_WIDTH / 2 - 60, y: CANVAS_HEIGHT / 2 - 50, width: 120, height: 15, type: 'wall', destructible: false, health: 999 });
-        obs.push({ x: CANVAS_WIDTH / 2 - 60, y: CANVAS_HEIGHT / 2 + 35, width: 120, height: 15, type: 'wall', destructible: false, health: 999 });
-
-        // Random maneələr
-        const randomCount = 3 + lvl;
-        for (let i = 0; i < randomCount; i++) {
-            const type = Math.random() < 0.4 ? 'rock' : (Math.random() < 0.6 ? 'wall' : 'bush');
-            obs.push({
-                x: 80 + Math.random() * (CANVAS_WIDTH - 160),
-                y: 80 + Math.random() * (CANVAS_HEIGHT - 180),
-                width: type === 'wall' ? 60 + Math.random() * 40 : 40,
-                height: type === 'wall' ? 12 : 40,
-                type,
-                destructible: type !== 'rock',
-                health: type === 'wall' ? 8 : 1
-            });
-        }
-        return obs;
-    }, []);
-
-    // Generate enemies for level
-    const generateEnemies = useCallback((lvl: number): Tank[] => {
-        const enemyCount = Math.min(2 + lvl, 6);
-        const newEnemies: Tank[] = [];
-
-        for (let i = 0; i < enemyCount; i++) {
-            newEnemies.push({
-                x: 100 + Math.random() * (CANVAS_WIDTH - 200),
-                y: 50 + Math.random() * 150, // Yuxarı hissədə
-                rotation: 90, // Aşağıya baxır
-                health: 1 + Math.floor(lvl / 3),
-                isPlayer: false,
-                lastShot: 0,
-                color: lvl >= 3 ? '#dc2626' : '#65a30d'
-            });
-        }
-        return newEnemies;
-    }, []);
-
-    // Generate powerups for level
-    let powerupIdCounter = 0;
-    const generatePowerups = useCallback((lvl: number): PowerUp[] => {
-        const pups: PowerUp[] = [];
-        const count = 2 + Math.floor(lvl / 2); // Daha çox level = daha çox bonus
-        const types: ('health' | 'speed' | 'shield')[] = ['health', 'health', 'speed', 'shield'];
-
-        for (let i = 0; i < count; i++) {
-            pups.push({
-                x: 50 + Math.random() * (CANVAS_WIDTH - 100),
-                y: 100 + Math.random() * (CANVAS_HEIGHT - 250),
-                type: types[Math.floor(Math.random() * types.length)],
-                id: ++powerupIdCounter
-            });
-        }
-        return pups;
-    }, []);
-
-    // Collision detection
-    const checkCollision = useCallback((
-        x1: number, y1: number, w1: number, h1: number,
-        x2: number, y2: number, w2: number, h2: number
-    ) => {
-        return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
-    }, []);
-
-    // Check if position is blocked
-    const isBlocked = useCallback((x: number, y: number, size: number, excludeTank?: Tank) => {
-        // Check canvas bounds
-        if (x < 0 || x + size > CANVAS_WIDTH || y < 0 || y + size > CANVAS_HEIGHT) return true;
-
-        // Check obstacles
-        for (const obs of obstaclesRef.current) {
-            if (obs.type !== 'bush' && checkCollision(x, y, size, size, obs.x, obs.y, obs.width, obs.height)) {
-                return true;
+        
+        // Check tank hits
+        if (bullet.isPlayer) {
+          let hitEnemy = false;
+          setEnemies(prevEnemies => prevEnemies.map(enemy => {
+            const enemyCenterX = enemy.x + TANK_SIZE / 2;
+            const enemyCenterY = enemy.y + TANK_SIZE / 2;
+            if (distance(newX, newY, enemyCenterX, enemyCenterY) < TANK_COLLISION_RADIUS + BULLET_SIZE / 2) {
+              hitEnemy = true;
+              addExplosion(enemyCenterX, enemyCenterY, 30);
+              const newHealth = enemy.health - 1;
+              if (newHealth <= 0) {
+                setScore(prev => prev + 100);
+                return null as any;
+              }
+              return { ...enemy, health: newHealth };
             }
+            return enemy;
+          }).filter(Boolean));
+          if (hitEnemy) continue;
+        } else {
+          // Enemy bullet hit player
+          if (distance(newX, newY, playerCenterX, playerCenterY) < TANK_COLLISION_RADIUS + BULLET_SIZE / 2) {
+            addExplosion(playerCenterX, playerCenterY, 20);
+            setPlayerTank(prev => {
+              const newHealth = prev.health - 15;
+              if (newHealth <= 0) {
+                setIsGameOver(true);
+                setIsPlaying(false);
+                setShowScoreSubmit(true);
+              }
+              return { ...prev, health: Math.max(0, newHealth) };
+            });
+            continue;
+          }
         }
-
-        // Check other tanks
-        const allTanks = [playerRef.current, ...enemiesRef.current];
-        for (const tank of allTanks) {
-            if (excludeTank && tank === excludeTank) continue;
-            if (checkCollision(x, y, size, size, tank.x, tank.y, TANK_SIZE, TANK_SIZE)) {
-                return true;
-            }
+        
+        activeBullets.push({ ...bullet, x: newX, y: newY });
+      }
+      
+      return activeBullets;
+    });
+    
+    // Update explosions
+    setExplosions(prev => prev.map(exp => ({ ...exp, frame: exp.frame + 1 })).filter(exp => exp.frame < exp.maxFrames));
+    
+    // Check powerup collection
+    setPowerups(prev => prev.filter(pup => {
+      if (distance(playerCenterX, playerCenterY, pup.x, pup.y) < TANK_COLLISION_RADIUS + 15) {
+        if (pup.type === 'health') {
+          setPlayerTank(p => ({ ...p, health: Math.min(p.health + 25, PLAYER_MAX_HEALTH) }));
+          setScore(s => s + 50);
+        } else if (pup.type === 'speed') {
+          setScore(s => s + 75);
+        } else if (pup.type === 'damage') {
+          setScore(s => s + 100);
         }
-
         return false;
-    }, [checkCollision]);
-
-    // Shoot bullet
-    const shoot = useCallback((tank: Tank) => {
-        const now = Date.now();
-        const cooldown = tank.isPlayer ? PLAYER_SHOOT_COOLDOWN : ENEMY_SHOOT_COOLDOWN;
-
-        if (now - tank.lastShot < cooldown) return null;
-
-        const radians = (tank.rotation * Math.PI) / 180;
-        const bulletX = tank.x + TANK_SIZE / 2 + Math.cos(radians) * (TANK_SIZE / 2);
-        const bulletY = tank.y + TANK_SIZE / 2 + Math.sin(radians) * (TANK_SIZE / 2);
-
-        return {
-            x: bulletX - BULLET_SIZE / 2,
-            y: bulletY - BULLET_SIZE / 2,
-            rotation: tank.rotation,
-            isPlayer: tank.isPlayer,
-            speed: BULLET_SPEED
-        };
-    }, []);
-
-    // Add explosion
-    const addExplosion = useCallback((x: number, y: number) => {
-        setExplosions(prev => [...prev, { x, y, frame: 0, maxFrames: 15 }]);
-    }, []);
-
-    // Game loop
-    const gameLoop = useCallback((timestamp: number) => {
-        if (!isPlaying || isGameOver || isPaused) return;
-
-        const deltaTime = timestamp - lastTimeRef.current;
-        if (deltaTime < 16) {
-            gameLoopRef.current = requestAnimationFrame(gameLoop);
-            return;
-        }
-        lastTimeRef.current = timestamp;
-
-        // Player movement
-        let newPlayerX = playerRef.current.x;
-        let newPlayerY = playerRef.current.y;
-        let newRotation = playerRef.current.rotation;
-
-        // Klassik tank kontrolleri: Sol/Sağ = dönmə, İrəli/Geri = hərəkət
-
-        // Dönmə (Sol/Sağ)
-        if (keysPressed.current.has('ArrowLeft') || keysPressed.current.has('KeyA')) {
-            newRotation -= ROTATION_SPEED;
-        }
-        if (keysPressed.current.has('ArrowRight') || keysPressed.current.has('KeyD')) {
-            newRotation += ROTATION_SPEED;
-        }
-
-        // İrəli hərəkət (Yuxarı/W)
-        if (keysPressed.current.has('ArrowUp') || keysPressed.current.has('KeyW')) {
-            const radians = (newRotation * Math.PI) / 180;
-            const moveX = Math.cos(radians) * TANK_SPEED;
-            const moveY = Math.sin(radians) * TANK_SPEED;
-            if (!isBlocked(newPlayerX + moveX, newPlayerY + moveY, TANK_SIZE, playerRef.current)) {
-                newPlayerX += moveX;
-                newPlayerY += moveY;
-            }
-        }
-
-        // Geri hərəkət (Aşağı/S) - daha yavaş
-        if (keysPressed.current.has('ArrowDown') || keysPressed.current.has('KeyS')) {
-            const radians = (newRotation * Math.PI) / 180;
-            const moveX = -Math.cos(radians) * TANK_SPEED * 0.6;
-            const moveY = -Math.sin(radians) * TANK_SPEED * 0.6;
-            if (!isBlocked(newPlayerX + moveX, newPlayerY + moveY, TANK_SIZE, playerRef.current)) {
-                newPlayerX += moveX;
-                newPlayerY += moveY;
-            }
-        }
-
-        // Player shooting
-        if (keysPressed.current.has('Space')) {
-            const bullet = shoot(playerRef.current);
-            if (bullet) {
-                setBullets(prev => [...prev, bullet]);
-                setPlayerTank(prev => ({ ...prev, lastShot: Date.now() }));
-            }
-        }
-
-        setPlayerTank(prev => ({ ...prev, x: newPlayerX, y: newPlayerY, rotation: newRotation }));
-
-        // Enemy AI - Ağıllı davranış
-        setEnemies(prevEnemies => {
-            return prevEnemies.map(enemy => {
-                const dx = playerRef.current.x - enemy.x;
-                const dy = playerRef.current.y - enemy.y;
-                const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                let angleDiff = targetAngle - enemy.rotation;
-                while (angleDiff > 180) angleDiff -= 360;
-                while (angleDiff < -180) angleDiff += 360;
-
-                let newRot = enemy.rotation;
-                if (Math.abs(angleDiff) > 5) {
-                    newRot += Math.sign(angleDiff) * Math.min(3, Math.abs(angleDiff));
-                }
-
-                // Oyunçuya görə yol açıqdır mı yoxla
-                const hasLineOfSight = (): boolean => {
-                    const steps = Math.ceil(distance / 20);
-                    for (let i = 1; i < steps; i++) {
-                        const checkX = enemy.x + TANK_SIZE / 2 + (dx / steps) * i;
-                        const checkY = enemy.y + TANK_SIZE / 2 + (dy / steps) * i;
-                        for (const obs of obstaclesRef.current) {
-                            if (obs.type !== 'bush' &&
-                                checkX > obs.x && checkX < obs.x + obs.width &&
-                                checkY > obs.y && checkY < obs.y + obs.height) {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                };
-
-                const canSeePlayer = hasLineOfSight();
-                let newX = enemy.x;
-                let newY = enemy.y;
-
-                if (!canSeePlayer) {
-                    // Yol bağlıdır - yan hərəkət et (qaçma manevrası)
-                    const sideAngle = (newRot + 90) * Math.PI / 180;
-                    const sideX = Math.cos(sideAngle) * TANK_SPEED;
-                    const sideY = Math.sin(sideAngle) * TANK_SPEED;
-
-                    // Sağa cəhd et
-                    if (!isBlocked(newX + sideX, newY + sideY, TANK_SIZE, enemy)) {
-                        newX += sideX;
-                        newY += sideY;
-                    }
-                    // Sola cəhd et
-                    else if (!isBlocked(newX - sideX, newY - sideY, TANK_SIZE, enemy)) {
-                        newX -= sideX;
-                        newY -= sideY;
-                    }
-                    // Geri çəkil
-                    else {
-                        const backAngle = (newRot + 180) * Math.PI / 180;
-                        const backX = Math.cos(backAngle) * TANK_SPEED * 0.5;
-                        const backY = Math.sin(backAngle) * TANK_SPEED * 0.5;
-                        if (!isBlocked(newX + backX, newY + backY, TANK_SIZE, enemy)) {
-                            newX += backX;
-                            newY += backY;
-                        }
-                    }
-                } else if (distance > 150) {
-                    // Yol açıqdır - oyunçuya doğru hərəkət et
-                    const radians = (newRot * Math.PI) / 180;
-                    const moveX = Math.cos(radians) * TANK_SPEED * 0.8;
-                    const moveY = Math.sin(radians) * TANK_SPEED * 0.8;
-                    if (!isBlocked(newX + moveX, newY + moveY, TANK_SIZE, enemy)) {
-                        newX += moveX;
-                        newY += moveY;
-                    }
-                }
-
-                // Atəş - yalnız yol açıqdırsa
-                const now = Date.now();
-                if (canSeePlayer && now - enemy.lastShot > ENEMY_SHOOT_COOLDOWN && Math.abs(angleDiff) < 20) {
-                    const bullet = shoot({ ...enemy, rotation: newRot });
-                    if (bullet) {
-                        setBullets(prev => [...prev, bullet]);
-                        return { ...enemy, x: newX, y: newY, rotation: newRot, lastShot: now };
-                    }
-                }
-
-                return { ...enemy, x: newX, y: newY, rotation: newRot };
-            });
-        });
-
-        // Update bullets
-        setBullets(prevBullets => {
-            const newBullets: Bullet[] = [];
-
-            for (const bullet of prevBullets) {
-                const radians = (bullet.rotation * Math.PI) / 180;
-                const newX = bullet.x + Math.cos(radians) * bullet.speed;
-                const newY = bullet.y + Math.sin(radians) * bullet.speed;
-
-                // Check bounds
-                if (newX < 0 || newX > CANVAS_WIDTH || newY < 0 || newY > CANVAS_HEIGHT) continue;
-
-                // Check obstacle collision - obstaclesRef istifadə edərək sync yoxla
-                let hitObstacle = false;
-                let hitObstacleIndex = -1;
-
-                for (let i = 0; i < obstaclesRef.current.length; i++) {
-                    const obs = obstaclesRef.current[i];
-                    if (obs.type !== 'bush' && checkCollision(newX, newY, BULLET_SIZE, BULLET_SIZE, obs.x, obs.y, obs.width, obs.height)) {
-                        hitObstacle = true;
-                        hitObstacleIndex = i;
-                        addExplosion(newX, newY);
-                        break;
-                    }
-                }
-
-                // Əgər maneəyə dəyibsə, güllə dayanır və maneənin sağlamlığı azalır
-                if (hitObstacle) {
-                    if (hitObstacleIndex >= 0) {
-                        setObstacles(prevObs => {
-                            return prevObs.map((obs, idx) => {
-                                if (idx === hitObstacleIndex && obs.destructible) {
-                                    const newHealth = obs.health - 1;
-                                    if (newHealth <= 0) return null as any;
-                                    return { ...obs, health: newHealth };
-                                }
-                                return obs;
-                            }).filter(Boolean);
-                        });
-                    }
-                    continue; // Güllə dayanır, delib keçmir!
-                }
-
-                // Check tank collision
-                if (bullet.isPlayer) {
-                    // Check enemy hits
-                    let hitEnemy = false;
-                    setEnemies(prevEnemies => {
-                        return prevEnemies.map(enemy => {
-                            if (checkCollision(newX, newY, BULLET_SIZE, BULLET_SIZE, enemy.x, enemy.y, TANK_SIZE, TANK_SIZE)) {
-                                hitEnemy = true;
-                                addExplosion(enemy.x + TANK_SIZE / 2, enemy.y + TANK_SIZE / 2);
-                                const newHealth = enemy.health - 1;
-                                if (newHealth <= 0) {
-                                    setScore(prev => prev + 100);
-                                    return null as any;
-                                }
-                                return { ...enemy, health: newHealth };
-                            }
-                            return enemy;
-                        }).filter(Boolean);
-                    });
-                    if (hitEnemy) continue;
-                } else {
-                    // Check player hit
-                    if (checkCollision(newX, newY, BULLET_SIZE, BULLET_SIZE, playerRef.current.x, playerRef.current.y, TANK_SIZE, TANK_SIZE)) {
-                        addExplosion(playerRef.current.x + TANK_SIZE / 2, playerRef.current.y + TANK_SIZE / 2);
-                        setPlayerTank(prev => {
-                            const newHealth = prev.health - 1;
-                            if (newHealth <= 0) {
-                                setIsGameOver(true);
-                                setIsPlaying(false);
-                                setShowScoreSubmit(true);
-                                const isRecord = topScores.length === 0 || score > (topScores[0]?.score || 0);
-                                setIsNewRecord(isRecord);
-                            }
-                            return { ...prev, health: newHealth };
-                        });
-                        continue;
-                    }
-                }
-
-                newBullets.push({ ...bullet, x: newX, y: newY });
-            }
-
-            return newBullets;
-        });
-
-        // Update explosions
-        setExplosions(prev => prev.map(exp => ({ ...exp, frame: exp.frame + 1 })).filter(exp => exp.frame < exp.maxFrames));
-
-        // Check powerup collection
-        setPowerups(prev => {
-            return prev.filter(pup => {
-                const POWERUP_SIZE = 30;
-                if (checkCollision(playerRef.current.x, playerRef.current.y, TANK_SIZE, TANK_SIZE,
-                    pup.x - POWERUP_SIZE / 2, pup.y - POWERUP_SIZE / 2, POWERUP_SIZE, POWERUP_SIZE)) {
-                    // Powerup toplandi!
-                    if (pup.type === 'health') {
-                        setPlayerTank(p => ({ ...p, health: Math.min(p.health + 3, PLAYER_MAX_HEALTH) }));
-                        setScore(s => s + 50);
-                    } else if (pup.type === 'speed') {
-                        setScore(s => s + 75);
-                        // Speed boost (temporary effect could be added later)
-                    } else if (pup.type === 'shield') {
-                        setPlayerTank(p => ({ ...p, health: Math.min(p.health + 1, PLAYER_MAX_HEALTH) }));
-                        setScore(s => s + 100);
-                    }
-                    return false; // Remove powerup
-                }
-                return true;
-            });
-        });
-
-        // Check level completion
-        if (enemiesRef.current.length === 0) {
-            setLevel(prev => prev + 1);
-            setEnemies(generateEnemies(level + 1));
-            setObstacles(generateObstacles(level + 1));
-            setPowerups(generatePowerups(level + 1));
-            setScore(prev => prev + 500); // Level bonus
-        }
-
-        gameLoopRef.current = requestAnimationFrame(gameLoop);
-    }, [isPlaying, isGameOver, isPaused, shoot, isBlocked, checkCollision, addExplosion, generateEnemies, generateObstacles, level, score, topScores]);
-
-    // Draw game
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // Clear canvas
-        ctx.fillStyle = '#4a5568';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-        // Draw grass pattern
-        ctx.fillStyle = '#48BB78';
-        for (let x = 0; x < CANVAS_WIDTH; x += 20) {
-            for (let y = 0; y < CANVAS_HEIGHT; y += 20) {
-                if ((x + y) % 40 === 0) {
-                    ctx.fillRect(x, y, 20, 20);
-                }
-            }
-        }
-
-        // Draw obstacles
-        for (const obs of obstacles) {
-            if (obs.type === 'rock') {
-                ctx.fillStyle = '#6B7280';
-                ctx.beginPath();
-                ctx.arc(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = '#4B5563';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            } else if (obs.type === 'wall') {
-                ctx.fillStyle = '#92400E';
-                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-                ctx.strokeStyle = '#78350F';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
-            } else {
-                ctx.fillStyle = '#22C55E';
-                ctx.globalAlpha = 0.7;
-                ctx.beginPath();
-                ctx.arc(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1;
-            }
-        }
-
-        // Draw powerups
-        const POWERUP_SIZE = 30;
-        for (const pup of powerups) {
-            ctx.save();
-
-            // Glow effect
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = pup.type === 'health' ? '#10B981' :
-                pup.type === 'speed' ? '#3B82F6' : '#F59E0B';
-
-            // Background circle
-            ctx.fillStyle = pup.type === 'health' ? '#10B981' :
-                pup.type === 'speed' ? '#3B82F6' : '#F59E0B';
-            ctx.beginPath();
-            ctx.arc(pup.x, pup.y, POWERUP_SIZE / 2, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Inner white circle
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(pup.x, pup.y, POWERUP_SIZE / 3, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Icon
-            ctx.fillStyle = pup.type === 'health' ? '#10B981' :
-                pup.type === 'speed' ? '#3B82F6' : '#F59E0B';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(pup.type === 'health' ? '+' : pup.type === 'speed' ? '⚡' : '🛡', pup.x, pup.y);
-
-            ctx.restore();
-        }
-
-        // Draw function for tanks
-        const drawTank = (tank: Tank) => {
-            ctx.save();
-            ctx.translate(tank.x + TANK_SIZE / 2, tank.y + TANK_SIZE / 2);
-            ctx.rotate((tank.rotation * Math.PI) / 180);
-
-            // Tank body
-            ctx.fillStyle = tank.color;
-            ctx.fillRect(-TANK_SIZE / 2, -TANK_SIZE / 2.5, TANK_SIZE, TANK_SIZE / 1.25);
-
-            // Tank tracks
-            ctx.fillStyle = '#374151';
-            ctx.fillRect(-TANK_SIZE / 2, -TANK_SIZE / 2.5, TANK_SIZE, 5);
-            ctx.fillRect(-TANK_SIZE / 2, TANK_SIZE / 2.5 - 5, TANK_SIZE, 5);
-
-            // Tank turret
-            ctx.fillStyle = tank.isPlayer ? '#2563EB' : (tank.color === '#dc2626' ? '#B91C1C' : '#4D7C0F');
-            ctx.beginPath();
-            ctx.arc(0, 0, TANK_SIZE / 3.5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Tank barrel
-            ctx.fillStyle = '#1F2937';
-            ctx.fillRect(0, -3, TANK_SIZE / 2 + 5, 6);
-
-            ctx.restore();
-
-            // Health bar
-            if (tank.health > 0) {
-                const maxHealth = tank.isPlayer ? PLAYER_MAX_HEALTH : (1 + Math.floor(level / 3));
-                const healthPercent = tank.health / maxHealth;
-                const barWidth = TANK_SIZE; // Sabit bar genişliyi
-                ctx.fillStyle = '#374151';
-                ctx.fillRect(tank.x, tank.y - 10, barWidth, 4);
-                ctx.fillStyle = healthPercent > 0.6 ? '#22C55E' : (healthPercent > 0.3 ? '#EAB308' : '#EF4444');
-                ctx.fillRect(tank.x, tank.y - 10, barWidth * healthPercent, 4);
-            }
-        };
-
-        // Draw player tank
-        if (playerTank.health > 0) {
-            drawTank(playerTank);
-        }
-
-        // Draw enemy tanks
-        for (const enemy of enemies) {
-            drawTank(enemy);
-        }
-
-        // Draw bullets
-        ctx.fillStyle = '#FBBF24';
-        for (const bullet of bullets) {
-            ctx.beginPath();
-            ctx.arc(bullet.x + BULLET_SIZE / 2, bullet.y + BULLET_SIZE / 2, BULLET_SIZE / 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Draw explosions
-        for (const exp of explosions) {
-            const progress = exp.frame / exp.maxFrames;
-            const radius = 20 + progress * 30;
-            const alpha = 1 - progress;
-
-            ctx.globalAlpha = alpha;
-            ctx.fillStyle = '#F97316';
-            ctx.beginPath();
-            ctx.arc(exp.x, exp.y, radius * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#FBBF24';
-            ctx.beginPath();
-            ctx.arc(exp.x, exp.y, radius * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-        }
-
-        // Draw UI overlay
-        if (!isPlaying && !isGameOver) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 32px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('🎮 TANK BATTLE', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40);
-            ctx.font = '18px Arial';
-            ctx.fillText('WASD/Arrows to move, SPACE to shoot', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 10);
-            ctx.fillText('Press START to begin!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
-        }
-
-        if (isPaused) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 48px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        }
-    }, [playerTank, enemies, bullets, obstacles, explosions, powerups, isPlaying, isGameOver, isPaused, level]);
-
-    // Keyboard event handlers
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-                e.preventDefault();
-            }
-            keysPressed.current.add(e.code);
-
-            if (e.code === 'Escape') {
-                setIsPaused(prev => !prev);
-            }
-        };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            keysPressed.current.delete(e.code);
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, []);
-
-    // Start game loop
-    useEffect(() => {
-        if (isPlaying && !isGameOver && !isPaused) {
-            lastTimeRef.current = performance.now();
-            gameLoopRef.current = requestAnimationFrame(gameLoop);
-        }
-        return () => {
-            if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current);
-        };
-    }, [isPlaying, isGameOver, isPaused, gameLoop]);
-
-    const startGame = () => {
-        setPlayerTank({
-            x: CANVAS_WIDTH / 2 - TANK_SIZE / 2,
-            y: CANVAS_HEIGHT - 80,
-            rotation: -90, // Yuxarıya baxır
-            health: PLAYER_MAX_HEALTH,
-            isPlayer: true,
-            lastShot: 0,
-            color: '#3b82f6'
-        });
-        setLevel(1);
-        setScore(0);
-        setEnemies(generateEnemies(1));
-        setObstacles(generateObstacles(1));
-        setPowerups(generatePowerups(1));
-        setBullets([]);
-        setExplosions([]);
-        setIsGameOver(false);
-        setIsPlaying(true);
-        setIsPaused(false);
-        setShowScoreSubmit(false);
-        setIsNewRecord(false);
-        setPlayerName("");
+      }
+      return true;
+    }));
+    
+    // Check level completion
+    if (enemiesRef.current.length === 0) {
+      setLevel(prev => {
+        const newLevel = prev + 1;
+        setEnemies(generateEnemies(newLevel));
+        setObstacles(generateObstacles(newLevel));
+        setPowerups(generatePowerups(newLevel));
+        return newLevel;
+      });
+      setScore(prev => prev + 500);
+    }
+    
+    // Draw
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        drawGame(ctx, playerRef.current, enemiesRef.current, bulletsRef.current, obstaclesRef.current, powerups, explosions, mousePos.current, level);
+      }
+    }
+    
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
+  }, [isPlaying, isGameOver, isPaused, addExplosion, level, powerups, explosions]);
+  
+  // Input handlers
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        e.preventDefault();
+      }
+      keysPressed.current.add(e.code);
+      
+      if (e.code === 'Escape') {
+        setIsPaused(prev => !prev);
+      }
     };
-
-    return (
-        <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
-            {/* Header - Responsive */}
-            <div className="flex flex-wrap items-center justify-between p-2 md:p-3 bg-muted/20 border-b shrink-0 gap-2">
-                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={onBack}>
-                    <span className="sr-only">Back</span>
-                    ←
-                </Button>
-
-                <div className="flex items-center gap-2 md:gap-4 text-sm overflow-x-auto no-scrollbar">
-                    <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
-                        <span className="hidden md:inline text-xs text-muted-foreground">Level:</span>
-                        <span className="font-bold">Lvl {level}</span>
-                    </div>
-                    <div className="flex items-center gap-1 md:gap-2 whitespace-nowrap">
-                        <span className="hidden md:inline text-xs text-muted-foreground">Score:</span>
-                        <span className="font-bold">🎯 {score}</span>
-                    </div>
-                    <div className="flex items-center gap-1 md:gap-2">
-                        <span className="hidden md:inline text-xs text-muted-foreground">HP:</span>
-                        <div className="w-16 md:w-20 h-3 bg-gray-600 rounded-full overflow-hidden border border-gray-500 shrink-0">
-                            <div
-                                className={`h-full transition-all ${playerTank.health > 30 ? 'bg-green-500' :
-                                    playerTank.health > 15 ? 'bg-yellow-500' : 'bg-red-500'
-                                    }`}
-                                style={{ width: `${(playerTank.health / PLAYER_MAX_HEALTH) * 100}%` }}
-                            />
-                        </div>
-                        <span className="text-xs font-bold min-w-[30px]">{playerTank.health}</span>
-                    </div>
-                </div>
-
-                <div className="flex gap-1 shrink-0">
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 px-2">
-                                <List className="h-3 w-3 md:mr-1" />
-                                <span className="hidden md:inline">Results</span>
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                            <DialogHeader>
-                                <DialogTitle className="flex items-center gap-2">
-                                    <Trophy className="h-5 w-5 text-yellow-500" />
-                                    Tank Battle - All Results
-                                </DialogTitle>
-                            </DialogHeader>
-                            <div className="mt-4">
-                                {allScores.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {allScores.map((score: any, index: number) => (
-                                            <div key={score.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30 border">
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`text-sm font-bold ${index < 3 ?
-                                                        index === 0 ? "text-yellow-500" :
-                                                            index === 1 ? "text-gray-400" : "text-orange-500"
-                                                        : "text-muted-foreground"}`}>
-                                                        #{index + 1}
-                                                    </span>
-                                                    <span className="font-medium">{score.playerName}</span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-sm font-mono font-bold">{score.score}</div>
-                                                    <div className="text-xs text-muted-foreground">{new Date(score.createdAt).toLocaleDateString()}</div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-center text-muted-foreground py-8">No scores yet. Be the first to play!</p>
-                                )}
-                            </div>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Start button removed from header - moved to main screen overlay */}
-
-                    {isPlaying && (
-                        <Button onClick={() => setIsPaused(p => !p)} size="sm" variant="outline" className="h-8 px-2">
-                            {isPaused ? 'Resume' : 'Pause'}
-                        </Button>
-                    )}
-                </div>
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current.delete(e.code);
+    };
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
+        mousePos.current = {
+          x: (e.clientX - rect.left) * scaleX,
+          y: (e.clientY - rect.top) * scaleY
+        };
+      }
+    };
+    
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) mouseDown.current = true;
+    };
+    
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) mouseDown.current = false;
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+  
+  // Start game loop
+  useEffect(() => {
+    if (isPlaying && !isGameOver && !isPaused) {
+      lastTimeRef.current = performance.now();
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    }
+    return () => {
+      if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current);
+    };
+  }, [isPlaying, isGameOver, isPaused, gameLoop]);
+  
+  const startGame = () => {
+    setPlayerTank({
+      x: CANVAS_WIDTH / 2 - TANK_SIZE / 2,
+      y: CANVAS_HEIGHT - 80,
+      rotation: -90,
+      turretRotation: -90,
+      health: PLAYER_MAX_HEALTH,
+      maxHealth: PLAYER_MAX_HEALTH,
+      isPlayer: true,
+      lastShot: 0,
+      color: '#3b82f6',
+      speed: PLAYER_SPEED,
+      vx: 0,
+      vy: 0
+    });
+    setLevel(1);
+    setScore(0);
+    setEnemies(generateEnemies(1));
+    setObstacles(generateObstacles(1));
+    setPowerups(generatePowerups(1));
+    setBullets([]);
+    setExplosions([]);
+    setIsGameOver(false);
+    setIsPlaying(true);
+    setIsPaused(false);
+    setShowScoreSubmit(false);
+    setPlayerName("");
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between p-2 md:p-3 bg-muted/20 border-b shrink-0 gap-2">
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={onBack}>
+          ←
+        </Button>
+        
+        <div className="flex items-center gap-2 md:gap-4 text-sm">
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="hidden md:inline text-xs text-muted-foreground">Level:</span>
+            <span className="font-bold">Lvl {level}</span>
+          </div>
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="hidden md:inline text-xs text-muted-foreground">Score:</span>
+            <span className="font-bold">🎯 {score}</span>
+          </div>
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="hidden md:inline text-xs text-muted-foreground">HP:</span>
+            <div className="w-16 md:w-24 h-3 bg-gray-600 rounded-full overflow-hidden border border-gray-500">
+              <div
+                className={`h-full transition-all ${
+                  playerTank.health > 60 ? 'bg-green-500' :
+                  playerTank.health > 30 ? 'bg-yellow-500' : 'bg-red-500'
+                }`}
+                style={{ width: `${(playerTank.health / PLAYER_MAX_HEALTH) * 100}%` }}
+              />
             </div>
-
-            {/* Start Game Overlay */}
-            {!isPlaying && !isGameOver && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                    <Button
-                        onClick={startGame}
-                        size="lg"
-                        className="text-xl font-bold px-8 py-6 bg-green-600 hover:bg-green-700 text-white shadow-lg scale-110 animate-pulse"
-                    >
-                        PLAY TANK BATTLE 🎮
-                    </Button>
-                </div>
-            )}
-
-            {/* Game Over Modal */}
-            {isGameOver && (
-                <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="border-destructive max-w-sm w-full">
-                        <CardContent className="p-4 text-center">
-                            <Trophy className="h-8 w-8 mx-auto mb-3 text-destructive" />
-                            <h2 className="text-lg font-bold mb-2">
-                                {isNewRecord ? "🎖️ NEW HIGH SCORE!" : "Game Over!"}
-                            </h2>
-                            <div className="text-sm mb-4 space-y-1">
-                                <p>Final Score: {score}</p>
-                                <p>Level Reached: {level}</p>
-                                {isNewRecord && <p className="text-yellow-600 font-semibold">New Record!</p>}
-                            </div>
-
-                            {showScoreSubmit && (
-                                <div className="mb-4 space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <User className="h-4 w-4" />
-                                        <Input
-                                            placeholder="Enter your name"
-                                            value={playerName}
-                                            onChange={(e) => setPlayerName(e.target.value)}
-                                            className="flex-1"
-                                            maxLength={20}
-                                        />
-                                    </div>
-                                    <Button
-                                        onClick={() => {
-                                            if (playerName.trim()) {
-                                                submitScoreMutation.mutate({
-                                                    playerName: playerName.trim(),
-                                                    score: score,
-                                                });
-                                            }
-                                        }}
-                                        disabled={!playerName.trim() || submitScoreMutation.isPending}
-                                        size="sm"
-                                        className="w-full mb-2"
-                                    >
-                                        {submitScoreMutation.isPending ? "Saving..." : "Save Score"}
-                                    </Button>
-                                </div>
-                            )}
-
-                            <Button onClick={startGame} size="sm" className="w-full">
-                                <RotateCcw className="h-4 w-4 mr-2" />
-                                Play Again
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-
-            {/* Game Canvas */}
-            <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-                <canvas
-                    ref={canvasRef}
-                    width={CANVAS_WIDTH}
-                    height={CANVAS_HEIGHT}
-                    className="border-2 border-muted rounded-lg shadow-xl max-w-full"
-                    style={{ imageRendering: 'pixelated' }}
-                />
-            </div>
-
-            {/* Mobile Controls */}
-            <div className="shrink-0 p-4 bg-muted/10">
-                <div className="max-w-md mx-auto grid grid-cols-3 gap-2">
-                    <div />
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onMouseDown={() => keysPressed.current.add('KeyW')}
-                        onMouseUp={() => keysPressed.current.delete('KeyW')}
-                        onTouchStart={() => keysPressed.current.add('KeyW')}
-                        onTouchEnd={() => keysPressed.current.delete('KeyW')}
-                        disabled={!isPlaying}
-                        className="h-12"
-                    >
-                        ↑
-                    </Button>
-                    <div />
-
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onMouseDown={() => keysPressed.current.add('KeyA')}
-                        onMouseUp={() => keysPressed.current.delete('KeyA')}
-                        onTouchStart={() => keysPressed.current.add('KeyA')}
-                        onTouchEnd={() => keysPressed.current.delete('KeyA')}
-                        disabled={!isPlaying}
-                        className="h-12"
-                    >
-                        ←
-                    </Button>
-                    <Button
-                        variant="default"
-                        size="lg"
-                        onMouseDown={() => keysPressed.current.add('Space')}
-                        onMouseUp={() => keysPressed.current.delete('Space')}
-                        onTouchStart={() => keysPressed.current.add('Space')}
-                        onTouchEnd={() => keysPressed.current.delete('Space')}
-                        disabled={!isPlaying}
-                        className="h-12"
-                    >
-                        🔥
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onMouseDown={() => keysPressed.current.add('KeyD')}
-                        onMouseUp={() => keysPressed.current.delete('KeyD')}
-                        onTouchStart={() => keysPressed.current.add('KeyD')}
-                        onTouchEnd={() => keysPressed.current.delete('KeyD')}
-                        disabled={!isPlaying}
-                        className="h-12"
-                    >
-                        →
-                    </Button>
-
-                    <div />
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onMouseDown={() => keysPressed.current.add('KeyS')}
-                        onMouseUp={() => keysPressed.current.delete('KeyS')}
-                        onTouchStart={() => keysPressed.current.add('KeyS')}
-                        onTouchEnd={() => keysPressed.current.delete('KeyS')}
-                        disabled={!isPlaying}
-                        className="h-12"
-                    >
-                        ↓
-                    </Button>
-                    <div />
-                </div>
-                <div className="mt-2 text-center text-xs text-muted-foreground">
-                    <p>WASD/Arrows: Move & Rotate • SPACE: Shoot 🎯 • ESC: Pause</p>
-                </div>
-            </div>
+            <span className="text-xs font-bold min-w-[30px]">{playerTank.health}</span>
+          </div>
         </div>
-    );
+        
+        <div className="flex gap-1 shrink-0">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 px-2">
+                <List className="h-3 w-3 md:mr-1" />
+                <span className="hidden md:inline">Results</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  Tank Battle - All Results
+                </DialogTitle>
+              </DialogHeader>
+              <div className="mt-4">
+                {allScores.length > 0 ? (
+                  <div className="space-y-2">
+                    {allScores.map((score: any, index: number) => (
+                      <div key={score.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30 border">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-bold ${
+                            index < 3 ?
+                              index === 0 ? "text-yellow-500" :
+                              index === 1 ? "text-gray-400" : "text-orange-500"
+                            : "text-muted-foreground"
+                          }`}>
+                            #{index + 1}
+                          </span>
+                          <span className="font-medium">{score.playerName}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-mono font-bold">{score.score}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(score.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">No scores yet!</p>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+          
+          {isPlaying && (
+            <Button onClick={() => setIsPaused(p => !p)} size="sm" variant="outline" className="h-8 px-2">
+              {isPaused ? 'Resume' : 'Pause'}
+            </Button>
+          )}
+        </div>
+      </div>
+      
+      {/* Start Game Overlay */}
+      {!isPlaying && !isGameOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="text-center space-y-6 p-8">
+            <h2 className="text-4xl font-bold text-white">🎮 Tank Battle</h2>
+            <div className="text-sm text-gray-300 space-y-2">
+              <p><kbd className="px-2 py-1 bg-muted rounded">WASD</kbd> / <kbd className="px-2 py-1 bg-muted rounded">Arrows</kbd> - Move</p>
+              <p><kbd className="px-2 py-1 bg-muted rounded">Mouse</kbd> - Aim turret</p>
+              <p><kbd className="px-2 py-1 bg-muted rounded">Click</kbd> / <kbd className="px-2 py-1 bg-muted rounded">Space</kbd> - Shoot</p>
+              <p><kbd className="px-2 py-1 bg-muted rounded">ESC</kbd> - Pause</p>
+            </div>
+            <Button
+              onClick={startGame}
+              size="lg"
+              className="text-xl font-bold px-8 py-6 bg-green-600 hover:bg-green-700 text-white shadow-lg"
+            >
+              START GAME
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {/* Game Over Modal */}
+      {isGameOver && (
+        <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="border-destructive max-w-sm w-full">
+            <CardContent className="p-4 text-center">
+              <Trophy className="h-8 w-8 mx-auto mb-3 text-destructive" />
+              <h2 className="text-lg font-bold mb-2">Game Over!</h2>
+              <div className="text-sm mb-4 space-y-1">
+                <p>Final Score: <span className="font-bold">{score}</span></p>
+                <p>Level Reached: <span className="font-bold">{level}</span></p>
+              </div>
+              
+              {showScoreSubmit && (
+                <div className="mb-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <Input
+                      placeholder="Enter your name"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value)}
+                      className="flex-1"
+                      maxLength={20}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (playerName.trim()) {
+                        submitScoreMutation.mutate({
+                          playerName: playerName.trim(),
+                          score: score,
+                        });
+                      }
+                    }}
+                    disabled={!playerName.trim() || submitScoreMutation.isPending}
+                    size="sm"
+                    className="w-full mb-2"
+                  >
+                    {submitScoreMutation.isPending ? "Saving..." : "Save Score"}
+                  </Button>
+                </div>
+              )}
+              
+              <Button onClick={startGame} size="sm" className="w-full">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Play Again
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Paused Overlay */}
+      {isPaused && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60">
+          <div className="text-center text-white">
+            <h2 className="text-4xl font-bold mb-4">PAUSED</h2>
+            <p className="text-muted-foreground">Press ESC to resume</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Game Canvas */}
+      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden cursor-crosshair">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="border-2 border-muted rounded-lg shadow-xl max-w-full"
+          style={{ imageRendering: 'auto' }}
+        />
+      </div>
+      
+      {/* Mobile Controls */}
+      <div className="shrink-0 p-2 bg-muted/10 md:hidden">
+        <div className="max-w-xs mx-auto grid grid-cols-3 gap-1">
+          <div />
+          <Button
+            variant="outline"
+            size="sm"
+            onTouchStart={() => keysPressed.current.add('KeyW')}
+            onTouchEnd={() => keysPressed.current.delete('KeyW')}
+            disabled={!isPlaying}
+            className="h-10"
+          >
+            ↑
+          </Button>
+          <div />
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onTouchStart={() => keysPressed.current.add('KeyA')}
+            onTouchEnd={() => keysPressed.current.delete('KeyA')}
+            disabled={!isPlaying}
+            className="h-10"
+          >
+            ←
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onTouchStart={() => { mouseDown.current = true; }}
+            onTouchEnd={() => { mouseDown.current = false; }}
+            disabled={!isPlaying}
+            className="h-10"
+          >
+            🔥
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onTouchStart={() => keysPressed.current.add('KeyD')}
+            onTouchEnd={() => keysPressed.current.delete('KeyD')}
+            disabled={!isPlaying}
+            className="h-10"
+          >
+            →
+          </Button>
+          
+          <div />
+          <Button
+            variant="outline"
+            size="sm"
+            onTouchStart={() => keysPressed.current.add('KeyS')}
+            onTouchEnd={() => keysPressed.current.delete('KeyS')}
+            disabled={!isPlaying}
+            className="h-10"
+          >
+            ↓
+          </Button>
+          <div />
+        </div>
+        <p className="text-center text-xs text-muted-foreground mt-1">
+          WASD: Move • Mouse: Aim • Click/Space: Shoot
+        </p>
+      </div>
+    </div>
+  );
 }
