@@ -89,7 +89,12 @@ const BULLET_SIZE = 6;
 const BULLET_SPEED = 10;
 const PLAYER_SPEED = 3.5;
 const PLAYER_SHOOT_COOLDOWN = 250;
-const ENEMY_SHOOT_COOLDOWN = 1200;
+
+// Dynamic difficulty - enemy shoot cooldown decreases over time
+const ENEMY_SHOOT_COOLDOWN_INITIAL = 1800; // Start slower (easier)
+const ENEMY_SHOOT_COOLDOWN_MIN = 600; // Cap at this (challenging but fair)
+const DIFFICULTY_RAMP_TIME = 120000; // 2 minutes to reach max difficulty
+
 const PLAYER_MAX_HEALTH = 100;
 
 // ============================================================================
@@ -300,12 +305,23 @@ function generatePowerups(level: number): PowerUp[] {
 // AI SYSTEM
 // ============================================================================
 
+// Calculate dynamic enemy shoot cooldown based on elapsed game time
+function getEnemyShootCooldown(gameStartTime: number): number {
+  const elapsed = Date.now() - gameStartTime;
+  const progress = Math.min(elapsed / DIFFICULTY_RAMP_TIME, 1);
+  // Smoothly interpolate from initial to min cooldown
+  const cooldown = ENEMY_SHOOT_COOLDOWN_INITIAL - 
+    (ENEMY_SHOOT_COOLDOWN_INITIAL - ENEMY_SHOOT_COOLDOWN_MIN) * progress;
+  return cooldown;
+}
+
 function updateEnemyAI(
   enemy: Tank,
   player: Tank,
   allTanks: Tank[],
   obstacles: Obstacle[],
-  deltaTime: number
+  deltaTime: number,
+  gameStartTime: number
 ): { tank: Tank; bullet: Bullet | null } {
   const e = { ...enemy };
   const now = Date.now();
@@ -347,9 +363,10 @@ function updateEnemyAI(
     e.aiState = 'patrol';
   }
   
-  // Turret always aims at player if visible
+  // Turret always aims at player if visible - faster aiming when attacking
   if (canSeePlayer) {
-    e.turretRotation = lerpAngle(e.turretRotation, angleToPlayer, 0.15);
+    const aimSpeed = e.aiState === 'attack' ? 0.2 : 0.12;
+    e.turretRotation = lerpAngle(e.turretRotation, angleToPlayer, aimSpeed);
   }
   
   // Movement based on state
@@ -359,21 +376,25 @@ function updateEnemyAI(
   
   switch (e.aiState) {
     case 'attack':
-      // Strafe while attacking
-      if (distToPlayer < 150) {
-        // Too close, back up
+      // More aggressive attack behavior
+      if (distToPlayer < 120) {
+        // Too close, back up while still shooting
         targetAngle = angleToPlayer + 180;
         moveForward = true;
-      } else {
-        // Circle strafe
-        const strafeAngle = angleToPlayer + 90 + Math.sin(now / 500) * 45;
+      } else if (distToPlayer < 200) {
+        // Optimal range - strafe to make harder target
+        const strafeAngle = angleToPlayer + 90 + Math.sin(now / 400) * 50;
         targetAngle = strafeAngle;
+        moveForward = true;
+      } else {
+        // Close the distance
+        targetAngle = angleToPlayer;
         moveForward = true;
       }
       break;
       
     case 'chase':
-      // Move toward player
+      // Aggressively pursue player
       targetAngle = angleToPlayer;
       moveForward = true;
       break;
@@ -388,11 +409,11 @@ function updateEnemyAI(
       
     case 'patrol':
     default:
-      // Move toward player's general area
+      // Actively hunt player - move toward their position
       if (!e.targetX || !e.targetY || distance(enemyCenterX, enemyCenterY, e.targetX, e.targetY) < 50) {
-        // Set new patrol target
-        e.targetX = playerCenterX + (Math.random() - 0.5) * 200;
-        e.targetY = playerCenterY + (Math.random() - 0.5) * 200;
+        // Set target toward player with some randomness
+        e.targetX = playerCenterX + (Math.random() - 0.5) * 150;
+        e.targetY = playerCenterY + (Math.random() - 0.5) * 150;
         e.targetX = clamp(e.targetX, 80, CANVAS_WIDTH - 80);
         e.targetY = clamp(e.targetY, 80, CANVAS_HEIGHT - 80);
       }
@@ -428,11 +449,15 @@ function updateEnemyAI(
     }
   }
   
-  // Shooting
+  // Intentional shooting - enemy actively fires when they have line of sight
+  // Cooldown decreases over time making the game progressively harder
   let bullet: Bullet | null = null;
-  if (canSeePlayer && now - e.lastShot > ENEMY_SHOOT_COOLDOWN) {
+  const currentCooldown = getEnemyShootCooldown(gameStartTime);
+  
+  if (canSeePlayer && now - e.lastShot > currentCooldown) {
     const turretDiff = Math.abs(normalizeAngle(e.turretRotation - angleToPlayer));
-    if (turretDiff < 15) {
+    // Wider aim tolerance makes enemies feel more aggressive
+    if (turretDiff < 20) {
       const rad = e.turretRotation * Math.PI / 180;
       bullet = {
         x: enemyCenterX + Math.cos(rad) * (TANK_SIZE / 2 + 5),
@@ -696,6 +721,8 @@ export default function TankGame({ onBack }: TankGameProps) {
   const [powerups, setPowerups] = useState<PowerUp[]>([]);
   const [playerName, setPlayerName] = useState("");
   const [showScoreSubmit, setShowScoreSubmit] = useState(false);
+  const [gameStartTime, setGameStartTime] = useState<number>(Date.now());
+  const [gameTime, setGameTime] = useState<number>(0); // Track elapsed time for display
   
   // Refs for game loop
   const keysPressed = useRef<Set<string>>(new Set());
@@ -861,12 +888,15 @@ export default function TankGame({ onBack }: TankGameProps) {
       turretRotation: angleToMouse
     }));
     
-    // Update enemies with improved AI
+    // Update game time for display
+    setGameTime(Math.floor((now - gameStartTime) / 1000));
+    
+    // Update enemies with improved AI and dynamic difficulty
     const newBullets: Bullet[] = [];
     setEnemies(prevEnemies => {
       const allTanks = [playerRef.current, ...prevEnemies];
       return prevEnemies.map(enemy => {
-        const result = updateEnemyAI(enemy, playerRef.current, allTanks, currentObstacles, deltaTime);
+        const result = updateEnemyAI(enemy, playerRef.current, allTanks, currentObstacles, deltaTime, gameStartTime);
         if (result.bullet) {
           newBullets.push(result.bullet);
         }
@@ -1000,7 +1030,7 @@ export default function TankGame({ onBack }: TankGameProps) {
     }
     
     gameLoopRef.current = requestAnimationFrame(gameLoop);
-  }, [isPlaying, isGameOver, isPaused, addExplosion, level, powerups, explosions]);
+  }, [isPlaying, isGameOver, isPaused, addExplosion, level, powerups, explosions, gameStartTime]);
   
   // Input handlers
   useEffect(() => {
@@ -1067,6 +1097,9 @@ export default function TankGame({ onBack }: TankGameProps) {
   }, [isPlaying, isGameOver, isPaused, gameLoop]);
   
   const startGame = () => {
+    const now = Date.now();
+    setGameStartTime(now);
+    setGameTime(0);
     setPlayerTank({
       x: CANVAS_WIDTH / 2 - TANK_SIZE / 2,
       y: CANVAS_HEIGHT - 80,
@@ -1111,6 +1144,17 @@ export default function TankGame({ onBack }: TankGameProps) {
           <div className="flex items-center gap-1 md:gap-2">
             <span className="hidden md:inline text-xs text-muted-foreground">Score:</span>
             <span className="font-bold">🎯 {score}</span>
+          </div>
+          <div className="flex items-center gap-1 md:gap-2">
+            <span className="hidden md:inline text-xs text-muted-foreground">Time:</span>
+            <span className="font-mono text-xs">{Math.floor(gameTime / 60)}:{(gameTime % 60).toString().padStart(2, '0')}</span>
+            {gameTime >= 60 && (
+              <span className={`text-xs px-1 py-0.5 rounded ${
+                gameTime >= 120 ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'
+              }`}>
+                {gameTime >= 120 ? '⚡⚡' : '⚡'}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 md:gap-2">
             <span className="hidden md:inline text-xs text-muted-foreground">HP:</span>
