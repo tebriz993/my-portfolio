@@ -1,0 +1,6 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "tabriz-portfolio-games",
+  "main": "party/index.ts",
+  "compatibilityDate": "2026-01-29"
+}

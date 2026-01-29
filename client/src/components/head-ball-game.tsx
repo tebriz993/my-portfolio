@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Trophy, List, Clock, Zap, ChevronLeft, ChevronRight, ArrowUp, Wifi, WifiOff } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import PartySocket from "partysocket";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -175,41 +176,41 @@ function updatePlayerPhysics(
   speedBoost: boolean
 ): Player {
   const p = { ...player };
-  
+
   if (p.frozen) return p;
 
   const speed = speedBoost ? PLAYER_SPEED * 1.6 : PLAYER_SPEED;
-  
+
   // Horizontal movement
   if (keys.left) p.vx -= speed * 0.4;
   if (keys.right) p.vx += speed * 0.4;
-  
+
   // Apply friction
   p.vx *= p.onGround ? GROUND_FRICTION : FRICTION;
-  
+
   // Clamp horizontal speed
   p.vx = clamp(p.vx, -speed, speed);
-  
+
   // Jump
   if (keys.up && p.onGround) {
     p.vy = PLAYER_JUMP_FORCE;
     p.onGround = false;
   }
-  
+
   // Gravity
   p.vy += GRAVITY;
-  
+
   // Update position
   p.x += p.vx;
   p.y += p.vy;
-  
+
   // Ground collision
   if (p.y + p.radius >= GROUND_Y) {
     p.y = GROUND_Y - p.radius;
     p.vy = 0;
     p.onGround = true;
   }
-  
+
   // Side boundaries - players stay on their side
   const midField = GAME_WIDTH / 2;
   if (p.side === 'left') {
@@ -219,29 +220,29 @@ function updatePlayerPhysics(
     // Right player can't enter their own goal or cross midfield
     p.x = clamp(p.x, midField + p.radius, GAME_WIDTH - GOAL_WIDTH - GOAL_DEPTH - p.radius);
   }
-  
+
   // Ceiling
   if (p.y - p.radius < 0) {
     p.y = p.radius;
     p.vy = Math.abs(p.vy) * 0.5;
   }
-  
+
   return p;
 }
 
 function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
   const b = { ...ball };
-  
+
   const currentRadius = bigBallActive ? BALL_RADIUS * 1.5 : BALL_RADIUS;
   b.radius = currentRadius;
-  
+
   // Gravity
   b.vy += GRAVITY * 0.8;
-  
+
   // Air resistance
   b.vx *= AIR_RESISTANCE;
   b.vy *= AIR_RESISTANCE;
-  
+
   // Clamp speed
   const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
   if (speed > MAX_BALL_SPEED) {
@@ -249,29 +250,29 @@ function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
     b.vx *= scale;
     b.vy *= scale;
   }
-  
+
   // Update position
   b.x += b.vx;
   b.y += b.vy;
-  
+
   // Ground bounce
   if (b.y + b.radius >= GROUND_Y) {
     b.y = GROUND_Y - b.radius;
     b.vy = -b.vy * BALL_BOUNCE;
     b.vx *= GROUND_FRICTION;
   }
-  
+
   // Ceiling bounce
   if (b.y - b.radius < 0) {
     b.y = b.radius;
     b.vy = Math.abs(b.vy) * BALL_BOUNCE;
   }
-  
+
   // Goal area boundaries
   const leftGoalRight = GOAL_WIDTH + GOAL_DEPTH;
   const rightGoalLeft = GAME_WIDTH - GOAL_WIDTH - GOAL_DEPTH;
   const goalTop = GROUND_Y - GOAL_HEIGHT;
-  
+
   // Left side - check if ball is in goal area or playing field
   if (b.x - b.radius < leftGoalRight) {
     // Check if ball is at goal height (can enter goal)
@@ -295,7 +296,7 @@ function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
       }
     }
   }
-  
+
   // Right side - check if ball is in goal area or playing field
   if (b.x + b.radius > rightGoalLeft) {
     if (b.y + b.radius > goalTop && b.y - b.radius < GROUND_Y) {
@@ -318,11 +319,11 @@ function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
       }
     }
   }
-  
+
   // Goal post collision (the vertical post at edge of goal opening)
   const leftPostX = GOAL_WIDTH + GOAL_DEPTH;
   const rightPostX = GAME_WIDTH - GOAL_WIDTH - GOAL_DEPTH;
-  
+
   // Left goal post
   if (distance(b.x, b.y, leftPostX, goalTop) < b.radius + GOAL_POST_WIDTH / 2) {
     const angle = Math.atan2(b.y - goalTop, b.x - leftPostX);
@@ -333,7 +334,7 @@ function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
     b.vx = Math.cos(angle) * speed;
     b.vy = Math.sin(angle) * speed;
   }
-  
+
   // Right goal post
   if (distance(b.x, b.y, rightPostX, goalTop) < b.radius + GOAL_POST_WIDTH / 2) {
     const angle = Math.atan2(b.y - goalTop, b.x - rightPostX);
@@ -344,7 +345,7 @@ function updateBallPhysics(ball: Ball, bigBallActive: boolean): Ball {
     b.vx = Math.cos(angle) * speed;
     b.vy = Math.sin(angle) * speed;
   }
-  
+
   return b;
 }
 
@@ -355,38 +356,38 @@ function handlePlayerBallCollision(
 ): { player: Player; ball: Ball; collided: boolean } {
   const dist = distance(player.x, player.y, ball.x, ball.y);
   const minDist = player.radius + ball.radius;
-  
+
   if (dist >= minDist) {
     return { player, ball, collided: false };
   }
-  
+
   const nx = (ball.x - player.x) / dist;
   const ny = (ball.y - player.y) / dist;
-  
+
   const overlap = minDist - dist;
   const newBall = { ...ball };
   newBall.x += nx * overlap;
   newBall.y += ny * overlap;
-  
+
   const force = isFireball ? PLAYER_BALL_FORCE * 1.8 : PLAYER_BALL_FORCE;
-  
+
   const playerInfluence = 0.6;
   newBall.vx = nx * force + player.vx * playerInfluence;
   newBall.vy = ny * force + player.vy * playerInfluence;
-  
+
   const playerMovingToBall = (player.vx * nx + player.vy * ny) > 0;
   if (playerMovingToBall) {
     const extraForce = Math.sqrt(player.vx * player.vx + player.vy * player.vy) * 0.5;
     newBall.vx += nx * extraForce;
     newBall.vy += ny * extraForce;
   }
-  
+
   if (ny < -0.3 && newBall.vy > -3) {
     newBall.vy = Math.min(newBall.vy, -6);
   }
-  
+
   newBall.lastTouchedBy = player.side === 'left' ? 'player1' : 'player2';
-  
+
   return { player, ball: newBall, collided: true };
 }
 
@@ -395,17 +396,17 @@ function checkGoal(ball: Ball): 'player1' | 'player2' | null {
   const goalTop = GROUND_Y - GOAL_HEIGHT;
   const leftGoalLine = GOAL_WIDTH; // The actual goal line
   const rightGoalLine = GAME_WIDTH - GOAL_WIDTH;
-  
+
   // Left goal (player2 scores) - ball center past the goal line
   if (ball.x < leftGoalLine && ball.y > goalTop && ball.y < GROUND_Y) {
     return 'player2';
   }
-  
+
   // Right goal (player1 scores) - ball center past the goal line
   if (ball.x > rightGoalLine && ball.y > goalTop && ball.y < GROUND_Y) {
     return 'player1';
   }
-  
+
   return null;
 }
 
@@ -420,69 +421,69 @@ function updateAI(
   difficulty: number = 0.85
 ): KeyState {
   const keys: KeyState = { left: false, right: false, up: false };
-  
+
   if (aiPlayer.frozen) return keys;
-  
+
   const ballPredictedX = ball.x + ball.vx * 15;
   const myGoalX = aiPlayer.side === 'left' ? GOAL_WIDTH + GOAL_DEPTH : GAME_WIDTH - GOAL_WIDTH - GOAL_DEPTH;
   const midField = GAME_WIDTH / 2;
-  
+
   const distToBall = distance(aiPlayer.x, aiPlayer.y, ball.x, ball.y);
   const ballOnMySide = aiPlayer.side === 'left' ? ball.x < midField + 50 : ball.x > midField - 50;
   const ballMovingToGoal = aiPlayer.side === 'left' ? ball.vx < -1 : ball.vx > 1;
-  const ballNearGoal = aiPlayer.side === 'left' 
-    ? ball.x < myGoalX + 150 
+  const ballNearGoal = aiPlayer.side === 'left'
+    ? ball.x < myGoalX + 150
     : ball.x > myGoalX - 150;
-  
+
   // Defensive behavior
   if (ballNearGoal && ballMovingToGoal) {
-    const targetX = aiPlayer.side === 'left' 
+    const targetX = aiPlayer.side === 'left'
       ? Math.max(ball.x - 30, myGoalX + 50)
       : Math.min(ball.x + 30, myGoalX - 50);
-    
+
     if (aiPlayer.x < targetX - 15) keys.right = true;
     else if (aiPlayer.x > targetX + 15) keys.left = true;
-    
+
     if (distToBall < 100 && ball.y < aiPlayer.y && aiPlayer.onGround) {
       keys.up = true;
     }
   }
   else if (!ballOnMySide || ball.vx * (aiPlayer.side === 'left' ? 1 : -1) > 2) {
     const readyX = aiPlayer.side === 'left' ? midField - 100 : midField + 100;
-    
+
     if (aiPlayer.x < readyX - 20) keys.right = true;
     else if (aiPlayer.x > readyX + 20) keys.left = true;
   }
   else {
     let targetX = ballPredictedX;
-    
+
     if (aiPlayer.side === 'left') {
       targetX = clamp(targetX, myGoalX + 50, midField - 30);
     } else {
       targetX = clamp(targetX, midField + 30, myGoalX - 50);
     }
-    
+
     const attackOffset = aiPlayer.side === 'left' ? -20 : 20;
     if (aiPlayer.x < targetX + attackOffset - 10) {
       keys.right = true;
     } else if (aiPlayer.x > targetX + attackOffset + 10) {
       keys.left = true;
     }
-    
-    const shouldJump = 
+
+    const shouldJump =
       (distToBall < 120 && ball.y < aiPlayer.y + 20) ||
       (ball.y < GROUND_Y - 100 && distToBall < 80) ||
       (Math.abs(aiPlayer.x - ball.x) < 50 && ball.y < aiPlayer.y - 20);
-    
+
     if (shouldJump && aiPlayer.onGround && Math.random() < difficulty) {
       keys.up = true;
     }
   }
-  
+
   if (Math.random() > difficulty) {
     if (Math.random() < 0.1) keys.up = !keys.up;
   }
-  
+
   return keys;
 }
 
@@ -495,21 +496,21 @@ function drawGame(
   state: GameState
 ) {
   const { player1, player2, ball, goalAnimation } = state;
-  
+
   // Clear and draw background
   ctx.fillStyle = '#228B22';
   ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-  
+
   // Draw grass pattern
   ctx.fillStyle = '#1E7D1E';
   for (let x = 0; x < GAME_WIDTH; x += 40) {
     ctx.fillRect(x, 0, 20, GAME_HEIGHT);
   }
-  
+
   // Draw ground
   ctx.fillStyle = '#654321';
   ctx.fillRect(0, GROUND_Y, GAME_WIDTH, GAME_HEIGHT - GROUND_Y);
-  
+
   // Draw center line
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
   ctx.lineWidth = 2;
@@ -519,23 +520,23 @@ function drawGame(
   ctx.lineTo(GAME_WIDTH / 2, GROUND_Y);
   ctx.stroke();
   ctx.setLineDash([]);
-  
+
   // Draw center circle
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(GAME_WIDTH / 2, GROUND_Y - 60, 60, Math.PI, 0);
   ctx.stroke();
-  
+
   // Draw goals
   const goalTop = GROUND_Y - GOAL_HEIGHT;
   const leftGoalRight = GOAL_WIDTH + GOAL_DEPTH;
   const rightGoalLeft = GAME_WIDTH - GOAL_WIDTH - GOAL_DEPTH;
-  
+
   // Left goal - dark interior
   ctx.fillStyle = '#1a1a2e';
   ctx.fillRect(0, goalTop, leftGoalRight, GOAL_HEIGHT);
-  
+
   // Left goal frame
   ctx.strokeStyle = '#FFD700';
   ctx.lineWidth = GOAL_POST_WIDTH;
@@ -549,7 +550,7 @@ function drawGame(
   ctx.moveTo(leftGoalRight, goalTop);
   ctx.lineTo(leftGoalRight, GROUND_Y);
   ctx.stroke();
-  
+
   // Left goal net pattern
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
   ctx.lineWidth = 1;
@@ -565,11 +566,11 @@ function drawGame(
     ctx.lineTo(x, GROUND_Y);
     ctx.stroke();
   }
-  
+
   // Right goal - dark interior
   ctx.fillStyle = '#1a1a2e';
   ctx.fillRect(rightGoalLeft, goalTop, GOAL_WIDTH + GOAL_DEPTH, GOAL_HEIGHT);
-  
+
   // Right goal frame
   ctx.strokeStyle = '#FFD700';
   ctx.lineWidth = GOAL_POST_WIDTH;
@@ -583,7 +584,7 @@ function drawGame(
   ctx.moveTo(rightGoalLeft, goalTop);
   ctx.lineTo(rightGoalLeft, GROUND_Y);
   ctx.stroke();
-  
+
   // Right goal net pattern
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
   ctx.lineWidth = 1;
@@ -599,7 +600,7 @@ function drawGame(
     ctx.lineTo(x, GROUND_Y);
     ctx.stroke();
   }
-  
+
   // Draw goal line indicators
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.lineWidth = 3;
@@ -615,83 +616,83 @@ function drawGame(
   ctx.lineTo(GAME_WIDTH - GOAL_WIDTH, GROUND_Y);
   ctx.stroke();
   ctx.setLineDash([]);
-  
+
   // Draw players
   drawPlayer(ctx, player1, goalAnimation === 1);
   drawPlayer(ctx, player2, goalAnimation === 2);
-  
+
   // Draw ball
   drawBall(ctx, ball);
 }
 
 function drawPlayer(ctx: CanvasRenderingContext2D, player: Player, celebrating: boolean) {
   const { x, y, radius, color, emoji, frozen, powerUp } = player;
-  
+
   ctx.save();
-  
+
   if (frozen) {
     ctx.globalAlpha = 0.6;
   }
-  
+
   if (powerUp === 'speed') {
     ctx.shadowColor = '#FFD700';
     ctx.shadowBlur = 20;
   }
-  
+
   // Draw body
   ctx.fillStyle = color;
-  
+
   // Head (circle)
   ctx.beginPath();
   ctx.arc(x, y - radius * 0.25, radius * 0.65, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Body
   ctx.beginPath();
   ctx.ellipse(x, y + radius * 0.25, radius * 0.45, radius * 0.65, 0, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Border
   ctx.strokeStyle = 'rgba(0,0,0,0.3)';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(x, y - radius * 0.25, radius * 0.65, 0, Math.PI * 2);
   ctx.stroke();
-  
+
   // Draw face/emoji
   ctx.font = `${radius * 0.9}px Arial`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(emoji, x, y - radius * 0.25);
-  
+
   if (celebrating) {
     ctx.font = '28px Arial';
     ctx.fillText('🎉', x, y - radius - 25);
   }
-  
+
   if (frozen) {
     ctx.font = `${radius}px Arial`;
     ctx.fillText('❄️', x, y);
   }
-  
+
   if (powerUp && powerUp !== 'speed') {
     const icon = POWER_UPS.find(p => p.type === powerUp)?.icon || '';
     ctx.font = '18px Arial';
     ctx.fillText(icon, x, y - radius - 18);
   }
-  
+
   ctx.restore();
 }
 
 function drawBall(ctx: CanvasRenderingContext2D, ball: Ball) {
   const { x, y, radius, isFireball } = ball;
-  
+
   ctx.save();
-  
+
   if (isFireball) {
     ctx.shadowColor = '#FF4500';
     ctx.shadowBlur = 30;
-    
+
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius * 2);
     gradient.addColorStop(0, '#FFFF00');
     gradient.addColorStop(0.3, '#FF6600');
@@ -701,20 +702,20 @@ function drawBall(ctx: CanvasRenderingContext2D, ball: Ball) {
     ctx.arc(x, y, radius * 2, 0, Math.PI * 2);
     ctx.fill();
   }
-  
+
   // Ball body
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
-  
+
   // Ball pattern
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.stroke();
-  
+
   // Pentagon pattern
   ctx.fillStyle = '#000000';
   const pentagonRadius = radius * 0.4;
@@ -728,7 +729,7 @@ function drawBall(ctx: CanvasRenderingContext2D, ball: Ball) {
   }
   ctx.closePath();
   ctx.fill();
-  
+
   ctx.restore();
 }
 
@@ -740,7 +741,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const [gameMode, setGameMode] = useState<'menu' | 'playing' | 'paused' | 'gameOver' | 'lobby'>('menu');
   const [playMode, setPlayMode] = useState<'ai' | 'local' | 'online'>('ai');
   const [gameState, setGameState] = useState<GameState>(createInitialGameState);
-  
+
   // Online multiplayer state
   const [roomCode, setRoomCode] = useState<string>("");
   const [joinCode, setJoinCode] = useState<string>("");
@@ -748,18 +749,18 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [connectionError, setConnectionError] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
-  
+
   // Power-up cooldowns
   const [p1Cooldowns, setP1Cooldowns] = useState<Map<PowerUpType, number>>(new Map());
   const [p2Cooldowns, setP2Cooldowns] = useState<Map<PowerUpType, number>>(new Map());
-  
+
   // Score submission
   const [playerName, setPlayerName] = useState<string>("");
   const [showScoreSubmit, setShowScoreSubmit] = useState<boolean>(false);
-  
+
   // Mobile touch controls
   const touchControlsRef = useRef<KeyState>({ left: false, right: false, up: false });
-  
+
   // Refs for game loop
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState>(gameState);
@@ -771,13 +772,13 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const frameIdRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const remoteKeysRef = useRef<KeyState>({ left: false, right: false, up: false });
-  
+
   const queryClient = useQueryClient();
-  
+
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
-  
+
   // Fetch scores
   const { data: topScores = [] } = useQuery({
     queryKey: ['/api/games/headball/scores'],
@@ -787,7 +788,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       return response.json();
     }
   });
-  
+
   const { data: allScores = [] } = useQuery({
     queryKey: ['/api/games/headball/all-scores'],
     queryFn: async () => {
@@ -796,7 +797,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       return response.json();
     }
   });
-  
+
   const submitScoreMutation = useMutation({
     mutationFn: async (scoreData: { playerName: string; score: number; timeInSeconds: number }) => {
       const response = await fetch('/api/games/headball/scores', {
@@ -814,52 +815,67 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       setPlayerName("");
     },
   });
-  
-  // WebSocket connection with better error handling
-  const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    
+
+  // PartyKit host configuration
+  // In production, use the deployed PartyKit server
+  // In development, use local PartyKit dev server
+  const PARTYKIT_HOST = import.meta.env.PROD
+    ? "tabriz-portfolio-games.partykit.dev"
+    : "localhost:1999";
+
+  // Generate 6-digit room code
+  const generateRoomCode = useCallback(() => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }, []);
+
+  // Connect to PartyKit room
+  const connectToRoom = useCallback((roomId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+
     setConnectionStatus('connecting');
     setConnectionError("");
-    
+
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      
+      const ps = new PartySocket({
+        host: PARTYKIT_HOST,
+        room: roomId,
+      });
+
+      wsRef.current = ps;
+
       const connectionTimeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.close();
+        if (ps.readyState !== WebSocket.OPEN) {
+          ps.close();
           setConnectionStatus('error');
           setConnectionError('Connection timeout. Server may be unavailable.');
         }
       }, 10000);
-      
-      ws.onopen = () => {
+
+      ps.onopen = () => {
         clearTimeout(connectionTimeout);
         setConnectionStatus('connected');
         setConnectionError("");
       };
-      
-      ws.onmessage = (event) => {
+
+      ps.onmessage = (event: MessageEvent) => {
         try {
           const message = JSON.parse(event.data);
-          
+
           switch (message.type) {
             case 'ROOM_CREATED':
               setRoomCode(message.payload.code);
               setGameMode('lobby');
               setIsHost(true);
               break;
-              
+
             case 'GAME_START':
               setGameMode('playing');
               setIsHost(message.payload.role === 'player1');
               startGame('online');
               break;
-              
+
             case 'GAME_STATE':
               if (!isHost && playMode === 'online') {
                 const state = message.payload;
@@ -872,7 +888,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                 }));
               }
               break;
-              
+
             case 'PLAYER_INPUT':
               if (isHost && playMode === 'online') {
                 const input = message.payload;
@@ -883,12 +899,12 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                 };
               }
               break;
-              
+
             case 'PLAYER_DISCONNECTED':
               setConnectionError('Opponent disconnected');
               resetGame();
               break;
-              
+
             case 'ERROR':
               setConnectionError(message.payload.message || 'Unknown error');
               if (gameMode === 'lobby') {
@@ -900,14 +916,14 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           console.error('Failed to parse WebSocket message:', e);
         }
       };
-      
-      ws.onerror = () => {
+
+      ps.onerror = () => {
         clearTimeout(connectionTimeout);
         setConnectionStatus('error');
-        setConnectionError('Connection failed. WebSocket server may not be running.');
+        setConnectionError('Connection failed. PartyKit server may not be running.');
       };
-      
-      ws.onclose = () => {
+
+      ps.onclose = () => {
         clearTimeout(connectionTimeout);
         if (connectionStatus !== 'error') {
           setConnectionStatus('disconnected');
@@ -915,50 +931,33 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       };
     } catch (error) {
       setConnectionStatus('error');
-      setConnectionError('Failed to create WebSocket connection');
+      setConnectionError('Failed to create PartySocket connection');
     }
-  }, [isHost, playMode, gameMode, connectionStatus]);
-  
+  }, [isHost, playMode, gameMode, connectionStatus, PARTYKIT_HOST]);
+
+  // Create a new room (host)
   const createRoom = useCallback(() => {
     setConnectionError("");
-    connectWebSocket();
-    
-    const checkAndSend = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'CREATE_ROOM' }));
-      } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
-        setTimeout(checkAndSend, 100);
-      }
-    };
-    
-    setTimeout(checkAndSend, 200);
-  }, [connectWebSocket]);
-  
+    const newRoomCode = generateRoomCode();
+    connectToRoom(newRoomCode);
+  }, [generateRoomCode, connectToRoom]);
+
+  // Join an existing room (client)
   const joinRoom = useCallback(() => {
     if (joinCode.length !== 6) {
       setConnectionError('Please enter a valid 6-digit room code');
       return;
     }
-    
+
     setConnectionError("");
-    connectWebSocket();
-    
-    const checkAndSend = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'JOIN_ROOM', payload: { code: joinCode } }));
-      } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
-        setTimeout(checkAndSend, 100);
-      }
-    };
-    
-    setTimeout(checkAndSend, 200);
-  }, [joinCode, connectWebSocket]);
-  
+    connectToRoom(joinCode);
+  }, [joinCode, connectToRoom]);
+
   // Keyboard handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.code;
-      
+
       if (key === 'KeyA' || key === 'ArrowLeft') {
         keysRef.current.p1.left = true;
         e.preventDefault();
@@ -971,19 +970,19 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         keysRef.current.p1.up = true;
         e.preventDefault();
       }
-      
+
       if (playMode === 'local') {
         if (key === 'KeyJ') keysRef.current.p2.left = true;
         if (key === 'KeyL') keysRef.current.p2.right = true;
         if (key === 'KeyI') keysRef.current.p2.up = true;
       }
-      
+
       if (gameMode === 'playing') {
         if (key === 'Digit1') usePowerUp('player1', 'freeze');
         if (key === 'Digit2') usePowerUp('player1', 'speed');
         if (key === 'Digit3') usePowerUp('player1', 'bigBall');
         if (key === 'Digit4') usePowerUp('player1', 'fireball');
-        
+
         if (playMode === 'local') {
           if (key === 'Digit7') usePowerUp('player2', 'freeze');
           if (key === 'Digit8') usePowerUp('player2', 'speed');
@@ -991,7 +990,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           if (key === 'Digit0') usePowerUp('player2', 'fireball');
         }
       }
-      
+
       if (playMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: 'PLAYER_INPUT',
@@ -999,20 +998,20 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         }));
       }
     };
-    
+
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.code;
-      
+
       if (key === 'KeyA' || key === 'ArrowLeft') keysRef.current.p1.left = false;
       if (key === 'KeyD' || key === 'ArrowRight') keysRef.current.p1.right = false;
       if (key === 'KeyW' || key === 'ArrowUp' || key === 'Space') keysRef.current.p1.up = false;
-      
+
       if (playMode === 'local') {
         if (key === 'KeyJ') keysRef.current.p2.left = false;
         if (key === 'KeyL') keysRef.current.p2.right = false;
         if (key === 'KeyI') keysRef.current.p2.up = false;
       }
-      
+
       if (playMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: 'PLAYER_INPUT',
@@ -1020,21 +1019,21 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         }));
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [gameMode, playMode, isHost]);
-  
+
   // Mobile touch control handlers
   const handleTouchStart = useCallback((control: 'left' | 'right' | 'up') => {
     touchControlsRef.current[control] = true;
     keysRef.current.p1[control] = true;
-    
+
     if (playMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'PLAYER_INPUT',
@@ -1042,11 +1041,11 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       }));
     }
   }, [playMode, isHost]);
-  
+
   const handleTouchEnd = useCallback((control: 'left' | 'right' | 'up') => {
     touchControlsRef.current[control] = false;
     keysRef.current.p1[control] = false;
-    
+
     if (playMode === 'online' && !isHost && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'PLAYER_INPUT',
@@ -1054,25 +1053,25 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       }));
     }
   }, [playMode, isHost]);
-  
+
   // Power-up usage
   const usePowerUp = useCallback((player: 'player1' | 'player2', type: PowerUpType) => {
     const cooldowns = player === 'player1' ? p1Cooldowns : p2Cooldowns;
     const setCooldowns = player === 'player1' ? setP1Cooldowns : setP2Cooldowns;
     const now = Date.now();
-    
+
     if (cooldowns.get(type) && cooldowns.get(type)! > now) return;
-    
+
     const powerUp = POWER_UPS.find(p => p.type === type);
     if (!powerUp) return;
-    
+
     setCooldowns(prev => new Map(prev).set(type, now + powerUp.cooldown));
-    
+
     setGameState(prev => {
       const newState = { ...prev };
       const targetPlayer = player === 'player1' ? 'player1' : 'player2';
       const opponent = player === 'player1' ? 'player2' : 'player1';
-      
+
       switch (type) {
         case 'freeze':
           newState[opponent] = {
@@ -1081,7 +1080,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             frozenEndTime: now + powerUp.duration
           };
           break;
-          
+
         case 'speed':
           newState[targetPlayer] = {
             ...newState[targetPlayer],
@@ -1089,7 +1088,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             powerUpEndTime: now + powerUp.duration
           };
           break;
-          
+
         case 'bigBall':
           newState[targetPlayer] = {
             ...newState[targetPlayer],
@@ -1097,7 +1096,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             powerUpEndTime: now + powerUp.duration
           };
           break;
-          
+
         case 'fireball':
           newState.ball = {
             ...newState.ball,
@@ -1108,25 +1107,25 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           };
           break;
       }
-      
+
       return newState;
     });
   }, [p1Cooldowns, p2Cooldowns]);
-  
+
   // Game loop
   const gameLoop = useCallback((timestamp: number) => {
     if (gameMode !== 'playing') return;
-    
+
     const deltaTime = timestamp - lastTimeRef.current;
     if (deltaTime < 16) {
       frameIdRef.current = requestAnimationFrame(gameLoop);
       return;
     }
     lastTimeRef.current = timestamp;
-    
+
     const state = gameStateRef.current;
     const now = Date.now();
-    
+
     if (playMode === 'online' && !isHost) {
       const canvas = canvasRef.current;
       if (canvas) {
@@ -1136,9 +1135,9 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       frameIdRef.current = requestAnimationFrame(gameLoop);
       return;
     }
-    
+
     let newState = { ...state };
-    
+
     if (state.player1.frozen && now > state.player1.frozenEndTime) {
       newState.player1 = { ...newState.player1, frozen: false };
     }
@@ -1154,21 +1153,21 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     if (state.ball.isFireball && now > state.ball.fireballEndTime) {
       newState.ball = { ...newState.ball, isFireball: false };
     }
-    
+
     let p2Keys = keysRef.current.p2;
     if (playMode === 'ai') {
       p2Keys = updateAI(state.player2, state.ball, state.player1, 0.85);
     } else if (playMode === 'online' && isHost) {
       p2Keys = remoteKeysRef.current;
     }
-    
+
     // Merge touch controls with keyboard
     const p1Keys = {
       left: keysRef.current.p1.left || touchControlsRef.current.left,
       right: keysRef.current.p1.right || touchControlsRef.current.right,
       up: keysRef.current.p1.up || touchControlsRef.current.up
     };
-    
+
     newState.player1 = updatePlayerPhysics(
       newState.player1,
       p1Keys,
@@ -1179,10 +1178,10 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       p2Keys,
       newState.player2.powerUp === 'speed'
     );
-    
+
     const bigBallActive = newState.player1.powerUp === 'bigBall' || newState.player2.powerUp === 'bigBall';
     newState.ball = updateBallPhysics(newState.ball, bigBallActive);
-    
+
     const p1Collision = handlePlayerBallCollision(
       newState.player1,
       newState.ball,
@@ -1191,7 +1190,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     if (p1Collision.collided) {
       newState.ball = p1Collision.ball;
     }
-    
+
     const p2Collision = handlePlayerBallCollision(
       newState.player2,
       newState.ball,
@@ -1200,7 +1199,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     if (p2Collision.collided) {
       newState.ball = p2Collision.ball;
     }
-    
+
     const goal = checkGoal(newState.ball);
     if (goal && newState.goalAnimation === 0) {
       if (goal === 'player1') {
@@ -1210,7 +1209,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       }
       newState.lastGoalScorer = goal;
       newState.goalAnimation = goal === 'player1' ? 1 : 2;
-      
+
       setTimeout(() => {
         setGameState(prev => ({
           ...prev,
@@ -1219,9 +1218,9 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         }));
       }, 1500);
     }
-    
+
     setGameState(newState);
-    
+
     if (playMode === 'online' && isHost && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'GAME_STATE',
@@ -1233,21 +1232,21 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         }
       }));
     }
-    
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) drawGame(ctx, newState);
     }
-    
+
     frameIdRef.current = requestAnimationFrame(gameLoop);
   }, [gameMode, playMode, isHost]);
-  
+
   useEffect(() => {
     if (gameMode === 'playing') {
       lastTimeRef.current = performance.now();
       frameIdRef.current = requestAnimationFrame(gameLoop);
-      
+
       timerRef.current = setInterval(() => {
         setGameState(prev => {
           if (prev.timeLeft <= 1) {
@@ -1259,13 +1258,13 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
         });
       }, 1000);
     }
-    
+
     return () => {
       if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [gameMode, gameLoop]);
-  
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -1273,7 +1272,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       if (ctx) drawGame(ctx, gameState);
     }
   }, []);
-  
+
   const startGame = useCallback((mode: 'ai' | 'local' | 'online') => {
     setPlayMode(mode);
     setGameMode('playing');
@@ -1289,7 +1288,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
     };
     touchControlsRef.current = { left: false, right: false, up: false };
   }, []);
-  
+
   const resetGame = useCallback(() => {
     setGameMode('menu');
     setGameState(createInitialGameState());
@@ -1304,10 +1303,10 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       wsRef.current = null;
     }
   }, []);
-  
+
   const handleSubmitScore = () => {
     if (playerName.trim()) {
-      const finalScore = Math.max(gameState.player1.score, gameState.player2.score) * 100 + 
+      const finalScore = Math.max(gameState.player1.score, gameState.player2.score) * 100 +
         (MATCH_DURATION - gameState.timeLeft) * 5;
       submitScoreMutation.mutate({
         playerName: playerName.trim(),
@@ -1316,11 +1315,11 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       });
     }
   };
-  
+
   // ============================================================================
   // RENDER
   // ============================================================================
-  
+
   // Menu screen
   if (gameMode === 'menu') {
     return (
@@ -1369,7 +1368,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             </DialogContent>
           </Dialog>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto">
           <div className="min-h-full flex flex-col items-center justify-center p-4 md:p-8">
             <div className="max-w-2xl w-full space-y-6 text-center">
@@ -1379,7 +1378,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   Physics-based football game with special powers!
                 </p>
               </div>
-              
+
               {/* Top Scores */}
               <div className="bg-muted/20 rounded-lg p-4">
                 <h3 className="text-lg font-semibold mb-3">🏆 Top Scores</h3>
@@ -1398,7 +1397,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   <p className="text-muted-foreground">No scores yet - be the first!</p>
                 )}
               </div>
-              
+
               {/* Game Mode Selection */}
               <div className="space-y-4">
                 <h3 className="text-xl font-semibold">Choose Game Mode</h3>
@@ -1410,13 +1409,13 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                     👥 Local Multiplayer
                   </Button>
                 </div>
-                
+
                 {/* Online Multiplayer */}
                 <div className="mt-6 border-t pt-6 bg-muted/10 p-4 rounded-lg">
                   <h3 className="text-xl font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
                     🌐 Online Multiplayer
                   </h3>
-                  
+
                   {/* Connection Status */}
                   <div className="flex items-center justify-center gap-2 mb-4 text-sm">
                     {connectionStatus === 'connected' ? (
@@ -1429,17 +1428,17 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                       <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Disconnected</span></>
                     )}
                   </div>
-                  
+
                   {connectionError && (
                     <div className="mb-4 p-2 bg-red-500/20 border border-red-500/30 rounded text-sm text-red-400">
                       {connectionError}
                     </div>
                   )}
-                  
+
                   <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
                     <div className="space-y-2">
-                      <Button 
-                        onClick={createRoom} 
+                      <Button
+                        onClick={createRoom}
                         className="w-full bg-indigo-600 hover:bg-indigo-700"
                         disabled={connectionStatus === 'connecting'}
                       >
@@ -1455,9 +1454,9 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                         maxLength={6}
                         className="text-center font-mono tracking-widest uppercase"
                       />
-                      <Button 
-                        onClick={joinRoom} 
-                        variant="outline" 
+                      <Button
+                        onClick={joinRoom}
+                        variant="outline"
                         className="w-full"
                         disabled={connectionStatus === 'connecting' || joinCode.length !== 6}
                       >
@@ -1467,7 +1466,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   </div>
                 </div>
               </div>
-              
+
               {/* Controls */}
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="bg-blue-500/10 rounded-lg p-3">
@@ -1487,7 +1486,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   </div>
                 </div>
               </div>
-              
+
               {/* Power-ups */}
               <div className="bg-muted/20 rounded-lg p-3">
                 <h4 className="font-semibold mb-2">Power-ups</h4>
@@ -1506,7 +1505,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
       </div>
     );
   }
-  
+
   // Lobby screen
   if (gameMode === 'lobby') {
     return (
@@ -1516,30 +1515,30 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             <h2 className="text-3xl font-bold mb-2">Waiting for Player...</h2>
             <p className="text-muted-foreground">Share this code with your friend:</p>
           </div>
-          
+
           <div className="py-6">
             <div className="text-6xl font-mono font-bold tracking-widest text-indigo-400 bg-background/50 py-4 rounded-lg border-2 border-indigo-500/20 select-all">
               {roomCode}
             </div>
           </div>
-          
+
           <div className="flex items-center justify-center gap-2 text-sm text-yellow-500 animate-pulse">
             <Zap className="h-4 w-4" />
             <span>Waiting for connection...</span>
           </div>
-          
+
           {connectionError && (
             <div className="p-2 bg-red-500/20 border border-red-500/30 rounded text-sm text-red-400">
               {connectionError}
             </div>
           )}
-          
+
           <Button variant="ghost" onClick={resetGame}>Cancel</Button>
         </div>
       </div>
     );
   }
-  
+
   // Game screen
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
@@ -1554,7 +1553,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             </span>
           </div>
         </div>
-        
+
         <div className="text-center">
           <div className="flex items-center gap-3 md:gap-4 text-xl md:text-2xl font-bold">
             <span className="text-blue-500">{gameState.player1.score}</span>
@@ -1567,14 +1566,14 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground hidden md:inline">
             {playMode === 'ai' ? '🤖 vs AI' : playMode === 'local' ? '👥 Local' : '🌐 Online'}
           </span>
         </div>
       </div>
-      
+
       {/* Game Canvas */}
       <div className="flex-1 flex items-center justify-center p-2 md:p-4 bg-gradient-to-b from-background to-muted/20 overflow-hidden">
         <canvas
@@ -1585,7 +1584,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           style={{ imageRendering: 'auto' }}
         />
       </div>
-      
+
       {/* Mobile Touch Controls */}
       <div className="md:hidden shrink-0 p-3 bg-muted/20 border-t">
         <div className="flex justify-center items-center gap-4">
@@ -1602,7 +1601,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           >
             <ChevronLeft className="h-8 w-8" />
           </Button>
-          
+
           {/* Jump Button */}
           <Button
             variant="default"
@@ -1616,7 +1615,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           >
             <ArrowUp className="h-10 w-10" />
           </Button>
-          
+
           {/* Right Button */}
           <Button
             variant="outline"
@@ -1635,7 +1634,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           Hold buttons to move • Tap jump to jump
         </p>
       </div>
-      
+
       {/* Power-up Controls (Desktop) */}
       <div className="hidden md:block p-3 bg-muted/10 shrink-0">
         <div className="max-w-4xl mx-auto grid grid-cols-2 gap-4">
@@ -1646,7 +1645,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                 const cooldownEnd = p1Cooldowns.get(power.type) || 0;
                 const isOnCooldown = cooldownEnd > Date.now();
                 const cooldownLeft = isOnCooldown ? Math.ceil((cooldownEnd - Date.now()) / 1000) : 0;
-                
+
                 return (
                   <Button
                     key={power.type}
@@ -1670,7 +1669,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
               })}
             </div>
           </div>
-          
+
           {playMode === 'local' && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-red-500">Player 2 Power-ups</h4>
@@ -1680,7 +1679,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   const isOnCooldown = cooldownEnd > Date.now();
                   const cooldownLeft = isOnCooldown ? Math.ceil((cooldownEnd - Date.now()) / 1000) : 0;
                   const keyNumber = index + 7;
-                  
+
                   return (
                     <Button
                       key={power.type}
@@ -1707,7 +1706,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
           )}
         </div>
       </div>
-      
+
       {/* Game Over Modal */}
       {gameMode === 'gameOver' && showScoreSubmit && (
         <div className="absolute inset-0 bg-background/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1715,7 +1714,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
             <CardContent className="p-6 text-center">
               <Trophy className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
               <h2 className="text-xl font-bold mb-2">Game Over!</h2>
-              
+
               <div className="mb-4 space-y-2">
                 <p className="text-lg">
                   Final Score: <span className="font-bold text-blue-500">{gameState.player1.score}</span> - <span className="font-bold text-red-500">{gameState.player2.score}</span>
@@ -1729,7 +1728,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
                   <p className="text-sm text-yellow-600 font-semibold">It's a Draw!</p>
                 )}
               </div>
-              
+
               <div className="space-y-3">
                 <Input
                   value={playerName}
