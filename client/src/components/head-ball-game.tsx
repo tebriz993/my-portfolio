@@ -748,7 +748,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const [isHost, setIsHost] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [connectionError, setConnectionError] = useState<string>("");
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | PartySocket | null>(null);
 
   // Power-up cooldowns
   const [p1Cooldowns, setP1Cooldowns] = useState<Map<PowerUpType, number>>(new Map());
@@ -819,9 +819,15 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   // PartyKit host configuration
   // In production, use the deployed PartyKit server
   // In development, use local PartyKit dev server
-  const PARTYKIT_HOST = import.meta.env.PROD
-    ? "tabriz-portfolio-games.partykit.dev"
-    : "localhost:1999";
+  // PartyKit host configuration
+  // Use robust check for production vs development
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  const PARTYKIT_HOST = isDevelopment
+    ? "localhost:1999"
+    : "tabriz-portfolio-games.tebriz993.partykit.dev";
+
+  console.log('PartyKit Host:', PARTYKIT_HOST); // Debug log
 
   // Generate 6-digit room code
   const generateRoomCode = useCallback(() => {
