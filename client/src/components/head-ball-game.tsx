@@ -141,6 +141,8 @@ function createInitialPlayer(side: 'left' | 'right'): Player {
   };
 }
 
+// ... existing code ...
+
 function createInitialBall(): Ball {
   return {
     x: GAME_WIDTH / 2,
@@ -749,6 +751,7 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [connectionError, setConnectionError] = useState<string>("");
   const wsRef = useRef<WebSocket | PartySocket | null>(null);
+  const frameCountRef = useRef<number>(0);
 
   // Power-up cooldowns
   const [p1Cooldowns, setP1Cooldowns] = useState<Map<PowerUpType, number>>(new Map());
@@ -1227,7 +1230,9 @@ export default function HeadBallGame({ onBack }: HeadBallGameProps) {
 
     setGameState(newState);
 
-    if (playMode === 'online' && isHost && wsRef.current?.readyState === WebSocket.OPEN) {
+    // Network throttle: Send updates every 3rd frame (~20 FPS)
+    frameCountRef.current++;
+    if (playMode === 'online' && isHost && wsRef.current?.readyState === WebSocket.OPEN && frameCountRef.current % 3 === 0) {
       wsRef.current.send(JSON.stringify({
         type: 'GAME_STATE',
         payload: {
