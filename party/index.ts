@@ -80,14 +80,14 @@ export default class HeadballServer implements Party.Server {
       switch (data.type) {
         case 'GAME_STATE':
           // Host sends game state to client
-          if (sender === this.host && this.client) {
+          if (this.host && sender.id === this.host.id && this.client) {
             this.client.send(message);
           }
           break;
 
         case 'PLAYER_INPUT':
           // Client sends input to host
-          if (sender === this.client && this.host) {
+          if (this.client && sender.id === this.client.id && this.host) {
             this.host.send(message);
           }
           break;
@@ -101,7 +101,10 @@ export default class HeadballServer implements Party.Server {
     console.log(`Player disconnected: ${conn.id}`);
 
     // Determine which player disconnected and notify the other
-    const otherPlayer = conn === this.host ? this.client : this.host;
+    const isHost = this.host && conn.id === this.host.id;
+    const isClient = this.client && conn.id === this.client.id;
+
+    const otherPlayer = isHost ? this.client : (isClient ? this.host : null);
 
     if (otherPlayer) {
       otherPlayer.send(JSON.stringify({
@@ -110,9 +113,9 @@ export default class HeadballServer implements Party.Server {
     }
 
     // Clean up room
-    if (conn === this.host) {
+    if (isHost) {
       this.host = null;
-    } else if (conn === this.client) {
+    } else if (isClient) {
       this.client = null;
     }
   }
