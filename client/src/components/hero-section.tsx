@@ -22,8 +22,8 @@ export function HeroSection() {
     trackEvent('download', 'cv', 'hero_section');
 
     const link = document.createElement('a');
-    link.href = '/Tabriz Latifov -- Software and DevSecOps Engineer.pdf';
-    link.download = 'Tabriz Latifov -- Software and DevSecOps Engineer.pdf';
+    link.href = '/Tabriz Latifov CV.pdf';
+    link.download = 'Tabriz Latifov CV.pdf';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
