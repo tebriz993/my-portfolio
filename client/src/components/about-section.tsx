@@ -18,7 +18,7 @@ export function AboutSection() {
             </div>
             <div>
               <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-              As a highly experienced Senior Backend and DevOps Engineer with a strong foundation in Full Stack development, I specialize in designing and delivering scalable, high-performance distributed systems. My technical expertise is anchored in the .NET ecosystem and Java/Spring Boot, complemented by a deep proficiency in TypeScript, JavaScript, and React.js for building sophisticated, responsive user interfaces.
+              As a highly experienced Senior Backend and DevOps Engineer with a strong foundation in product development, I specialize in designing and delivering scalable, high-performance distributed systems. My technical expertise is anchored in the .NET ecosystem and Java/Spring Boot, complemented by a deep proficiency in TypeScript, JavaScript, and React.js for building sophisticated, responsive user interfaces.
               </p>
               <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
                I have a proven track record of architecting robust Microservices and automating complex cloud infrastructures using Docker, Kubernetes, and CI/CD pipelines. I am a strong advocate for Clean Architecture, CQRS, and Event-Driven systems (Kafka/RabbitMQ). Having led development teams across diverse industries, I focus on engineering excellence, state management (Redux/Zustand), and seamless API integration to deliver high-quality, end-to-end business solutions.
