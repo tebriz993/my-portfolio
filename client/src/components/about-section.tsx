@@ -18,10 +18,10 @@ export function AboutSection() {
             </div>
             <div>
               <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-              As a highly experienced Senior Backend and DevOps Engineer with a strong foundation in product development, I specialize in designing and delivering scalable, high-performance distributed systems. My technical expertise is anchored in the .NET ecosystem and Java/Spring Boot, complemented by a deep proficiency in TypeScript, JavaScript, and React.js for building sophisticated, responsive user interfaces.
+             As a Senior Backend and DevOps Engineer with a strong focus on product development, I specialize in building scalable, high-performance distributed systems. My core expertise lies in the .NET ecosystem and Java/Spring, along with TypeScript, JavaScript, and React.js for responsive UIs
               </p>
               <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-               I have a proven track record of architecting robust Microservices and automating complex cloud infrastructures using Docker, Kubernetes, and CI/CD pipelines. I am a strong advocate for Clean Architecture, CQRS, and Event-Driven systems (Kafka/RabbitMQ). Having led development teams across diverse industries, I focus on engineering excellence, state management (Redux/Zustand), and seamless API integration to deliver high-quality, end-to-end business solutions.
+               I have extensive experience designing Microservices and automating cloud infrastructure with Docker, Kubernetes, and CI/CD pipelines. I follow Clean Architecture, CQRS, and Event-Driven patterns (Kafka/RabbitMQ), and focus on engineering excellence, state management (Redux/Zustand), and seamless API integration to deliver end-to-end solutions.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <Card className="text-center h-24 flex items-center justify-center">
