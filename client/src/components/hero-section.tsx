@@ -49,7 +49,7 @@ export function HeroSection() {
               sequence={[
                 "Hi, I'm Tabriz!",
                 1000,
-                "Full Stack Software Engineer",
+                "Software and DevOps Engineer",
                 1000,
                 "Building innovative web solutions",
                 1500,
