@@ -18,10 +18,10 @@ export function AboutSection() {
             </div>
             <div>
               <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-                As a highly experienced Full Stack Software Engineer, I have consistently delivered scalable and high-performance web applications using technologies such as C#, .NET, Microservices, JavaScript, TypeScript, React.js, as well as modern cloud services and deployment tools across a wide variety of projects and industries.
+              As a highly experienced Senior Backend and DevOps Engineer with a strong foundation in Full Stack development, I specialize in designing and delivering scalable, high-performance distributed systems. My technical expertise is anchored in the .NET ecosystem and Java/Spring Boot, complemented by a deep proficiency in TypeScript, JavaScript, and React.js for building sophisticated, responsive user interfaces.
               </p>
               <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-                I have a proven track record of leading development teams and architecting robust microservice solutions. My expertise spans from backend API development to intuitive frontend interfaces, with a strong focus on clean code and efficient, modular architectures.
+               I have a proven track record of architecting robust Microservices and automating complex cloud infrastructures using Docker, Kubernetes, and CI/CD pipelines. I am a strong advocate for Clean Architecture, CQRS, and Event-Driven systems (Kafka/RabbitMQ). Having led development teams across diverse industries, I focus on engineering excellence, state management (Redux/Zustand), and seamless API integration to deliver high-quality, end-to-end business solutions.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <Card className="text-center h-24 flex items-center justify-center">
@@ -44,7 +44,7 @@ export function AboutSection() {
                 </Card>
                 <Card className="text-center h-24 flex items-center justify-center">
                   <CardContent className="p-3">
-                    <div className="text-xl font-bold text-primary mb-1">3</div>
+                    <div className="text-xl font-bold text-primary mb-1">4</div>
                     <p className="text-xs text-muted-foreground">Published Articles</p>
                   </CardContent>
                 </Card>
